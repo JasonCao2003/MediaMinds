@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: spark-service
+  config:
+    import: configserver:http://localhost:8888
+
+# 讯飞星火大模型配置
+xunfei:
+  spark:
+    api-url: https://spark-api-open.xf-yun.com/v2/chat/completions
+    api-password: "WPoPQCdnRImKfNYxdZIp:usrWANisIrZTkxmgGdlR"  # 从讯飞控制台获取的API密码
+    model: x1
+    max-tokens: 4096
+    temperature: 0.5
+    stream: true

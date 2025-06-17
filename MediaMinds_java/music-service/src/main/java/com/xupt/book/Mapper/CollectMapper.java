@@ -1,0 +1,10 @@
+package com.xupt.book.Mapper;
+
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.xupt.book.Pojo.Collect;
+import org.apache.ibatis.annotations.Mapper;
+
+@Mapper
+public interface CollectMapper extends BaseMapper<Collect> {
+
+}

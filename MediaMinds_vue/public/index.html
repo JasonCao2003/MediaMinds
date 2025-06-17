@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link href="<%= BASE_URL %>favicon.ico" rel="icon">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>MediaMinds</title>
+    <!-- Global variable polyfill for sockjs-client -->
+    <script>
+        window.global = window;
+        window.process = window.process || { env: {} };
+    </script>
+</head>
+<body>
+    <noscript>
+        <strong>We're sorry but MediaMinds doesn't work properly without JavaScript enabled. Please enable it to continue.</strong>
+    </noscript>
+    <div id="app"></div>
+    <!-- built files will be auto injected -->
+</body>
+</html> 

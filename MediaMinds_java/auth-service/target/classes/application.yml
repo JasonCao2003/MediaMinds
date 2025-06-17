@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: auth-service
+  config:
+    import: configserver:http://localhost:8888
+# Mail
+  mail:
+    host: smtp.qq.com
+    port: 587
+    username: 2764184496@qq.com
+    password: lwajxiyrkgguddie
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true

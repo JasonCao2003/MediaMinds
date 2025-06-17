@@ -1,0 +1,35 @@
+server:
+  port: 9010
+spring:
+  application:
+    name: flask-service
+#  config:
+#    import: configserver:http://localhost:8888
+#  # Kafka
+#  kafka:
+#    bootstrap-servers: localhost:9092
+## Bus
+#  cloud:
+#    bus:
+#      enabled: true
+#      refresh:
+#        enabled: true
+## Actuator
+#management:
+#  endpoints:
+#    web:
+#      exposure:
+#        include: "*"
+## Eureka
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+# mybatis-plus
+#mybatis-plus:
+#  configuration:
+#    map-underscore-to-camel-case: true
+#    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+#  global-config:
+#    db-config:
+#      id-type: ASSIGN_ID

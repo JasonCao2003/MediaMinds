@@ -1,0 +1,66 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: gateway-service
+# loadbalancer
+  cloud:
+    loadbalancer:
+      configurations: zone-preference
+      health-check:
+        initial-delay: 2s
+        interval: 30s
+# gateway
+    gateway:
+      routes:
+        # 用户登录鉴权 9000
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/v1/auth/**
+        # 异步通知服务 9007
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/v1/notification/**
+        # Flask调用 9010
+        - id: flask-service
+          uri: lb://flask-service
+          predicates:
+            - Path=/v1/flask/**
+        # Music服务 9005
+        - id: music-service
+          uri: lb://music-service
+          predicates:
+            - Path=/v1/music/**
+        # Book服务 9006
+        - id: book-service
+          uri: lb://book-service
+          predicates:
+            - Path=/v1/book/**
+        # Video服务 9007
+        - id: video-service
+          uri: lb://video-service
+          predicates:
+            - Path=/v1/video/**
+        # Spark服务 9008
+        - id: spark-service
+          uri: lb://spark-service
+          predicates:
+            - Path=/v1/spark/**
+        # Document服务 9009
+        - id: document-service
+          uri: lb://document-service
+          predicates:
+            - Path=/v1/document/**
+# Eureka
+eureka:
+  client:
+    service-url:
+      defaultZone: http://127.0.0.1:8761/eureka
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
