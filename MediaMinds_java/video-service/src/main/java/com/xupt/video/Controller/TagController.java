@@ -2,7 +2,6 @@ package com.xupt.video.Controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xupt.video.DTO.Result;
-import com.xupt.video.Filter.RoleCheck;
 import com.xupt.video.Pojo.Movie;
 import com.xupt.video.Pojo.Tag;
 import com.xupt.video.Service.TagService;
@@ -46,7 +45,6 @@ public class TagController {
     }
 
     // 新增标签
-    @RoleCheck("admin")
     @Operation(summary = "新增标签", description = "管理员权限，添加新的电影标签")
     @PostMapping
     public Result<?> addTag(
@@ -55,7 +53,6 @@ public class TagController {
     }
 
     // 修改标签
-    @RoleCheck("admin")
     @Operation(summary = "修改标签", description = "管理员权限，更新指定标签的信息")
     @PutMapping
     public Result<?> updateTag(
@@ -64,7 +61,6 @@ public class TagController {
     }
 
     // 删除标签
-    @RoleCheck("admin")
     @Operation(summary = "删除标签", description = "管理员权限，根据标签 ID 删除标签")
     @DeleteMapping("/{id}")
     public Result<?> deleteTag(

@@ -3,11 +3,6 @@ server:
 spring:
   application:
     name: agent-service
-  cloud:
-    config:
-      enabled: false
-      import-check:
-        enabled: false
 # Actuator
 management:
   endpoints:

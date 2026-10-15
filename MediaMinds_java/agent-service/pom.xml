@@ -37,10 +37,6 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-openfeign</artifactId>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-config</artifactId>
-        </dependency>
         <!-- LangChain4j：Agent 编排（工具调用 / 多轮对话 / 记忆） -->
         <dependency>
             <groupId>dev.langchain4j</groupId>

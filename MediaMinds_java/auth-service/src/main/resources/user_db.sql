@@ -28,7 +28,6 @@ CREATE TABLE `user` (
                         `nick_name` varchar(255) DEFAULT NULL,
                         `password` varchar(255) NOT NULL,
                         `email` varchar(255) NOT NULL,
-                        `role` varchar(50) NOT NULL DEFAULT 'user',
                         `oauth2_provider` varchar(255) DEFAULT NULL,
                         `oauth2_access_token` varchar(255) DEFAULT NULL,
                         `oauth2_refresh_token` varchar(255) DEFAULT NULL,

@@ -21,21 +21,6 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-        <!-- Spring Cloud 配置中心 -->
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-config</artifactId>
-        </dependency>
-        <!-- Spring Cloud Kafka 支持 -->
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-bus-kafka</artifactId>
-        </dependency>
-        <!-- Kafka 客户端 -->
-        <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
-        </dependency>
         <!-- Spring Boot Actuator，用于监控和管理 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -92,11 +77,6 @@
             <version>3.5.11</version>
         </dependency>
         <!-- JSON 序列化支持 -->
-        <dependency>
-            <groupId>org.codehaus.jettison</groupId>
-            <artifactId>jettison</artifactId>
-            <version>1.5.4</version>
-        </dependency>
         <!-- 邮件发送支持 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

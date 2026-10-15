@@ -9,7 +9,6 @@ import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/v1/auth/login")
@@ -32,11 +31,6 @@ public class LoginController {
     @PostMapping("/emailLogin")
     public Result<?> emailLogin(@RequestParam("email") String email, @RequestParam("code") String code) {
         return loginService.emailLogin(email, code);
-    }
-    // 人脸登录
-    @PostMapping("/faceLogin")
-    public Result<?> faceLogin(@RequestParam("image") MultipartFile file){
-        return loginService.faceLogin(file);
     }
 
     // 退出登录

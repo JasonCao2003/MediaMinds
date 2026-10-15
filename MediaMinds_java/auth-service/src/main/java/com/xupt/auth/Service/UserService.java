@@ -73,11 +73,6 @@ public class UserService {
             queryWrapper.like("email", email);
         }
         
-        String role = (String) params.get("role");
-        if (StringUtils.hasText(role)) {
-            queryWrapper.eq("role", role);
-        }
-        
         String status = (String) params.get("status");
         if (StringUtils.hasText(status)) {
             queryWrapper.eq("status", status);
@@ -110,11 +105,6 @@ public class UserService {
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("status", "active");
         return userMapper.selectCount(queryWrapper).intValue();
-    }
-    
-    // 修改用户角色
-    public boolean updateUserRole(String userId, String role) {
-        return userMapper.updateUserRole(userId, role) > 0;
     }
     
     // 修改用户状态

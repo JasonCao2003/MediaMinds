@@ -23,7 +23,6 @@ public class User implements Serializable {
     private String email;
     private Date birthday;
     private String sex;
-    private String role = "user";
     private String introduction;
     private String oauth2Provider;
     private String oauth2AccessToken;

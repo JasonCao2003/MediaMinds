@@ -2,7 +2,6 @@ package com.xupt.book.kugou;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.xupt.book.DTO.Result;
-import com.xupt.book.Filter.RoleCheck;
 import com.xupt.book.Pojo.Song;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -131,7 +130,6 @@ public class KugouController {
 
     // ================= 导入本地曲库 =================
 
-    @RoleCheck("admin")
     @Operation(summary = "导入歌曲到本地曲库", description = "将酷狗歌曲写入本地 song 表（自动创建歌手、写入歌词与封面，可选下载音频到 MinIO）")
     @PostMapping("/import")
     public Result<?> importSong(@RequestBody Map<String, Object> body) {

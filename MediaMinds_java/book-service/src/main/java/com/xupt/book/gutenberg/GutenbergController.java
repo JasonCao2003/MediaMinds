@@ -2,7 +2,6 @@ package com.xupt.book.gutenberg;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.xupt.book.DTO.Result;
-import com.xupt.book.Filter.RoleCheck;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -42,7 +41,6 @@ public class GutenbergController {
         return Result.success(detail);
     }
 
-    @RoleCheck("admin")
     @Operation(summary = "导入书籍到本地书库", description = "将 Gutenberg 书籍写入 book 表，下载封面与正文，按章节切分后存入 MinIO 并写入 book_chapter")
     @PostMapping("/import")
     public Result<?> importBook(@Parameter(description = "Gutenberg 书籍 ID") @RequestParam long id) {

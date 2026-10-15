@@ -1,7 +1,7 @@
 name: mediaminds-infra
 
-# 与现有 mm-* 容器配置保持一致（Zookeeper 版 Kafka）
-# 说明：本机已存在同名容器与容器卷，日常请用 `docker start mm-mysql mm-redis mm-minio mm-zookeeper mm-kafka`
+# 与现有 mm-* 容器配置保持一致
+# 说明：本机已存在同名容器与容器卷，日常请用 `docker start mm-mysql mm-redis mm-minio`
 #      （或 deploy/start-all.sh）。仅在需要重建时再使用 `docker compose -f deploy/docker-compose.yml up -d`。
 
 services:
@@ -49,38 +49,6 @@ services:
     volumes:
       - mm-minio-data:/data
 
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    container_name: mm-zookeeper
-    restart: unless-stopped
-    networks: [mm-net]
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    ports:
-      - "2181:2181"
-
-  kafka:
-    image: confluentinc/cp-kafka:7.5.0
-    container_name: mm-kafka
-    restart: unless-stopped
-    networks: [mm-net]
-    depends_on: [zookeeper]
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: mm-zookeeper:2181
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-    ports:
-      - "9092:9092"
-    volumes:
-      - mm-kafka-data:/var/lib/kafka/data
-
 networks:
   mm-net:
     name: mm-net
@@ -89,4 +57,3 @@ volumes:
   mm-mysql-data:
   mm-redis-data:
   mm-minio-data:
-  mm-kafka-data:

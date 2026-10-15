@@ -24,7 +24,6 @@ public class JWTFilter implements GlobalFilter, Ordered {
     private static final List<String> EXCLUDED_PATHS = Arrays.asList(
             "/v1/auth/login/accountLogin",
             "/v1/auth/login/emailLogin",
-            "/v1/auth/login/faceLogin",
             "/v1/auth/login/sendValidation",
             "/v1/auth/user/register"
     );
@@ -46,7 +45,6 @@ public class JWTFilter implements GlobalFilter, Ordered {
             ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()
                     .header("X-UserId", (String) claims.get("userId"))
                     .header("X-UserName", (String) claims.get("userName"))
-                    .header("X-Role", (String) claims.get("role"))
                     .build();
             return chain.filter(exchange.mutate().request(modifiedRequest).build());
         } catch (Exception e) {

@@ -9,10 +9,8 @@
 | MySQL 8 | `mm-mysql` | 3306 | root / 123456 |
 | Redis 7 | `mm-redis` | 6379 | 无密码 |
 | MinIO | `mm-minio` | 9000（API）/ 9101（控制台） | minioadmin / minioadmin |
-| Zookeeper | `mm-zookeeper` | 2181 | — |
-| Kafka | `mm-kafka` | 9092 | — |
 
-微服务与前端端口见根目录 `README.md`：Eureka 8761、网关 8080、auth 9003、music 9005、book 9006、video 9007、agent 9011、document 9009、notification 9001、flask 9010，Next.js 前端 5173。
+微服务与前端端口见根目录 `README.md`：Eureka 8761、网关 8080、auth 9003、music 9005、book 9006、video 9007、agent 9011，Next.js 前端 5173。
 
 ## 一键启动
 
@@ -24,7 +22,7 @@ cd MediaMinds_java && mvn -DskipTests clean install
 bash ../deploy/start-all.sh
 ```
 
-脚本会：启动 `mm-*` 容器 → 等待 MySQL/Redis/MinIO/Kafka → 启动 Eureka → 依次启动业务微服务 → 启动网关 → 启动 Next.js(5173) 前端。
+脚本会：启动 `mm-*` 容器 → 等待 MySQL/Redis/MinIO → 启动 Eureka → 依次启动业务微服务 → 启动网关 → 启动 Next.js(5173) 前端。
 
 ## 停止
 
@@ -32,6 +30,25 @@ bash ../deploy/start-all.sh
 bash deploy/stop-all.sh              # 仅停止应用服务，保留 Docker 基础设施
 bash deploy/stop-all.sh --with-infra # 连同 Docker 容器一起停止
 ```
+
+## 重新编译
+
+代码变更后重新构建（**只构建，不启动任何服务**）：
+
+```bash
+bash deploy/rebuild.sh                     # 后端 + 前端
+bash deploy/rebuild.sh backend             # 仅后端（mvn -DskipTests install）
+bash deploy/rebuild.sh frontend            # 仅前端（tsc + npm run build）
+bash deploy/rebuild.sh backend --clean     # 先 clean 再构建
+bash deploy/rebuild.sh --typecheck-only    # 后端构建 + 前端仅类型检查
+```
+
+脚本会先做环境检查（Java / Maven / Node / npm），随后逐个构建并汇总耗时；
+前端缺 `node_modules` 时会自动 `npm install`。
+构建产物就绪后由你自行重启：`bash deploy/stop-all.sh && bash deploy/start-all.sh`。
+
+> `start-all.sh` 启动前端时同样使用 **生产模式**（`npm run build && npm start`），
+> 首次启动需要等待构建完成（约 1-2 分钟）。开发调试如需 HMR，可手动改用 `npm run dev`。
 
 ## 数据库初始化
 
@@ -67,18 +84,17 @@ export DEEPSEEK_API_KEY="sk-xxxxxx"             # 智能入库 Agent 的大模�
 
 ## 外部数据源入库
 
-后端已内置三个数据源接入（均需管理员权限）：
+后端已内置三个数据源接入：
 
 | 来源 | 端点 | 说明 |
 | --- | --- | --- |
 | 酷狗音乐 | `POST /v1/music/kugou/import` | 写入 `song`/`singer`，含歌词；直链需 VIP |
 | 豆瓣图书 | `POST /v1/book/douban/import?id=` | 写入 `book`（仅元信息：书名/作者/封面/简介/出版信息） |
-| Project Gutenberg | `POST /v1/book/gutenberg/import?id=` | 旧书源（保留），写入 `book`/`book_chapter` |
 | TMDB | `POST /v1/video/tmdb/import/batch` | 写入 `movie`，自动建分类/标签并关联，海报入 MinIO |
 | 智能 Agent | `POST /v1/agent/chat`（多轮）/ `POST /v1/agent/query` / `POST /v1/agent/import` | 基于 **LangChain4j + DeepSeek** 的工具调用智能体：大模型自主检索（酷狗 / TMDB / 豆瓣）、生成自然语言回复，并可按序号批量入库元数据 |
 
 ## 说明
 
-- 业务服务已内置本地配置（`spring.cloud.config.enabled=false`），可不依赖 `config-service` 运行；`config-service` 会克隆远程配置仓库，需要外网。
-- `flask-service` 的人脸识别依赖本机 `http://localhost:5000` 的 Python 服务（当前仓库仅有 notebook，未提供 Flask 服务），因此人脸登录暂不可用，其余功能不受影响。
+- 各服务配置全部来自本地 `src/main/resources/application.yml`，不依赖配置中心。
+- 登录方式为账号密码与邮箱验证码（人脸识别登录已移除）。
 - 日志位于 `deploy/logs/`，进程 PID 位于 `deploy/pids/`。

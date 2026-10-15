@@ -130,10 +130,9 @@ public class CommentService {
             // 从ThreadLocal获取用户ID
             Map<String, Object> claims = ThreadLocalUtil.get();
             String userId = claims.get("userId").toString();
-            String role = claims.get("role").toString();
             
-            // 验证权限：只有评论作者或管理员可以删除评论
-            if (!comment.getUserId().equals(userId) && !"admin".equalsIgnoreCase(role)) {
+            // 验证权限：只有评论作者本人可以删除自己的评论
+            if (!comment.getUserId().equals(userId)) {
                 return Result.error(403, "您没有权限删除该评论");
             }
             

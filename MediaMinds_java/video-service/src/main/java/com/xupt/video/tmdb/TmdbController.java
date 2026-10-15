@@ -2,7 +2,6 @@ package com.xupt.video.tmdb;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.xupt.video.DTO.Result;
-import com.xupt.video.Filter.RoleCheck;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -87,7 +86,6 @@ public class TmdbController {
         return Result.success(detail);
     }
 
-    @RoleCheck("admin")
     @Operation(summary = "导入影片到本地影视库", description = "将 TMDB 影片写入本地 movie 表，自动创建分类/标签并建立关联，可选下载海报到 MinIO")
     @PostMapping("/import")
     public Result<?> importMovie(@Parameter(description = "TMDB 影片 ID") @RequestParam long tmdbId) {
@@ -95,7 +93,6 @@ public class TmdbController {
         return Result.success(result);
     }
 
-    @RoleCheck("admin")
     @Operation(summary = "批量导入影片", description = "按 TMDB 影片 ID 列表批量导入，返回成功/已存在/失败明细")
     @PostMapping("/import/batch")
     public Result<?> importMovies(@RequestBody List<Long> tmdbIds) {

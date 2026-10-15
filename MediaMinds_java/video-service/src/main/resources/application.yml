@@ -9,19 +9,6 @@ spring:
     username: root
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
-  # Kafka
-  kafka:
-    bootstrap-servers: localhost:9092
-  # Bus
-  cloud:
-    config:
-      enabled: false
-      import-check:
-        enabled: false
-    bus:
-      enabled: true
-      refresh:
-        enabled: true
 # Actuator
 management:
   endpoints:

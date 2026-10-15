@@ -13,21 +13,11 @@ spring:
 # gateway
     gateway:
       routes:
-        # 用户登录鉴权 9000
+        # 用户登录鉴权 9003
         - id: auth-service
           uri: lb://auth-service
           predicates:
             - Path=/v1/auth/**
-        # 异步通知服务 9007
-        - id: notification-service
-          uri: lb://notification-service
-          predicates:
-            - Path=/v1/notification/**
-        # Flask调用 9010
-        - id: flask-service
-          uri: lb://flask-service
-          predicates:
-            - Path=/v1/flask/**
         # Music服务 9005
         - id: music-service
           uri: lb://music-service
@@ -48,11 +38,6 @@ spring:
           uri: lb://agent-service
           predicates:
             - Path=/v1/agent/**
-        # Document服务 9009
-        - id: document-service
-          uri: lb://document-service
-          predicates:
-            - Path=/v1/document/**
 # Eureka
 eureka:
   instance:

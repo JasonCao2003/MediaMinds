@@ -12,7 +12,7 @@ interface QueueItem extends NotifyPayload {
 
 /**
  * 全局通知宿主：订阅 notifyBus 并以 MUI Snackbar 顺序展示。
- * axios 拦截器与 WebSocket 服务均通过该组件反馈用户。
+ * axios 拦截器与各页面均通过该组件反馈用户。
  */
 export default function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [queue, setQueue] = useState<QueueItem[]>([]);

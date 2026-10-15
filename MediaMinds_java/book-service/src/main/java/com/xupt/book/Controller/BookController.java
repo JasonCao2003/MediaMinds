@@ -2,7 +2,6 @@ package com.xupt.book.Controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xupt.book.DTO.Result;
-import com.xupt.book.Filter.RoleCheck;
 import com.xupt.book.Pojo.Book;
 import com.xupt.book.Service.BookService;
 import com.xupt.book.Utils.MinioUtil;
@@ -69,7 +68,6 @@ public class BookController {
     }
 
     // 新增书籍信息
-    @RoleCheck("admin")
     @Operation(summary = "新增书籍", description = "管理员权限，添加新的书籍信息")
     @PostMapping
     public Result<?> addBook(
@@ -78,7 +76,6 @@ public class BookController {
     }
 
     // 修改书籍信息
-    @RoleCheck("admin")
     @Operation(summary = "修改书籍信息", description = "管理员权限，更新指定书籍的信息")
     @PutMapping
     public Result<?> updateBook(
@@ -87,7 +84,6 @@ public class BookController {
     }
 
     // 修改书籍封面
-    @RoleCheck("admin")
     @Operation(summary = "修改书籍封面", description = "管理员权限，更新指定书籍的封面")
     @PutMapping("/cover")
     public Result<?> updateCover(
@@ -100,7 +96,6 @@ public class BookController {
     }
 
     // 删除书籍信息
-    @RoleCheck("admin")
     @Operation(summary = "删除书籍", description = "管理员权限，根据书籍 ID 删除书籍信息")
     @DeleteMapping("/{id}")
     public Result<?> deleteBook(

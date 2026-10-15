@@ -10,7 +10,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -23,8 +22,6 @@ public class LoginService {
     private StringRedisTemplate redisTemplate;
     @Resource
     private UserMapper userMapper;
-    @Resource
-    private FlaskService flaskService;
 
     // 检查用户状态
     private Result<?> checkUserStatus(User user) {
@@ -67,24 +64,6 @@ public class LoginService {
         return validCode ? generateTokenAndReturn(user) : Result.error(404, "验证码错误");
     }
 
-    // 人脸登录
-    public Result<?> faceLogin(MultipartFile file){
-        try {
-            String userName = flaskService.Face2User(file);
-            User user = userMapper.selectByUserName(userName);
-            
-            // 检查用户状态
-            Result<?> statusCheck = checkUserStatus(user);
-            if (statusCheck != null) {
-                return statusCheck;
-            }
-            
-            return generateTokenAndReturn(user);
-        }catch (Exception e) {
-            return Result.error(500,e.getMessage());
-        }
-    }
-
     // TODO: oauth2登录
 
 
@@ -105,7 +84,6 @@ public class LoginService {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getUserId());
         claims.put("userName", user.getUserName());
-        claims.put("role", user.getRole());
         String token = JwtUtil.genToken(claims);
         storeTokenInRedis(token);
         return Result.loginSuccess(token);

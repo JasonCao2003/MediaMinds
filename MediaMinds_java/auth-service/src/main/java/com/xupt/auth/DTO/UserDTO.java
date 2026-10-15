@@ -13,7 +13,6 @@ public class UserDTO {
     private String userName;
     private String nickName;
     private String email;
-    private String role;
     private Date birthday;
     private String sex;
     private String avatar;

@@ -32,16 +32,25 @@
 - **豆瓣书源（`book-service`）**：新增 `/v1/book/douban/search`、`/v1/book/douban/{id}`、`/v1/book/douban/import`，抓取豆瓣图书搜索结果与 rexxar 详情接口，仅入库元信息（书名/作者/封面/简介/出版信息），不下载正文。Agent 的图书来源已切换为豆瓣。
 
 ### Changed
+- **前端取消「管理端」概念，统一为单一角色**：删除 `/admin` 路由组与 `AdminLayout`，13 个内容管理页迁移到 `/content/manage/*`（控制面板 / 用户 / 图书 / 音乐 / 视频），导航合并进唯一的 `UserLayout`（管理分组悬停弹出子菜单）；`api/admin.ts` → `api/manage.ts`、`components/admin/` → `components/manage/`；移除 `isAdmin()`、`UserInfo.role`、个人页「管理员/普通用户」标签、用户管理页的角色筛选/切换按钮；`GlobalMusicPlayer` 不再按角色隐藏。
+- **后端彻底移除角色体系**：删除 4 个服务的 `RoleCheck` 注解类与 37 处 `@RoleCheck` 注解；`Interceptor` 不再读取 `X-Role`；网关不再透传 `X-Role`；JWT 不再写入 `role` claim；移除 `/v1/auth/user/updateRole` 接口、`UserService.updateUserRole`、`UserMapper.updateUserRole`、`User.role` 与 `UserDTO.role`；`user` 表移除 `role` 列（建表 SQL 同步更新）；影视评论删除权限由「作者或管理员」收敛为「仅作者本人」。
 - 前端技术栈由 Vue 3 + Element Plus 迁移至 Next.js 15 + Material UI，端口统一为 5173。
 - 前端视觉重构为「Midnight」深色设计系统：仅深色主题、近黑深蓝背景 + 大圆角悬浮外壳、浅紫强调色 `#7C7FF2`、低饱和卡片与颗粒质感；左侧导航改为纯图标轨道（悬停提示，管理端分组悬停弹出子菜单）。
 - 全站字体更换为 **JetBrains Maple Mono**（经 ZSFT CDN 按 unicode-range 分片加载）。
 
 ### Removed
 - 移除 `MediaMinds_vue/`（Vue 3 前端），功能已由 `MediaMinds_next/` 完整替代。
-- 移除前端「文档管理」功能：用户端 `/content/document`、管理端 `/admin/document` 页面、导航入口、`api/document.ts` 及相关类型（后端 `document-service` 暂保留）。
+- 移除前端「文档管理」功能：用户端 `/content/document`、管理端 `/admin/document` 页面、导航入口、`api/document.ts` 及相关类型（后端 `document-service` 随后一并移除，见下）。
 - 移除 `spark-service`（讯飞星火大模型服务）及其网关路由与启动项；同步移除前端依赖它的「文章 AI 概要」（阅读器）与「歌词情感分析」（音乐页）功能。
 - 移除独立的「酷狗音乐」页面（`/content/kugou`）与导航入口，改为合并进「音乐浏览」页的「酷狗搜索」标签页。
 - **改为单用户模式**：移除全部角色校验（music/book/video/document/auth 服务的 `Interceptor` 不再校验 `@RoleCheck`），前端去掉 `admin` 路由守卫与角色跳转；用户数据精简为 1 个账号（`caozhexuanadmin`，role=`user`）。
+- **移除 `notification-service` 与 `document-service`**：删除两个 Maven 模块、网关路由（`/v1/notification/**`、`/v1/document/**`）、`deploy/start-all.sh` 与 `stop-all.sh` 中的启动条目，以及 `deploy/mysql-init/05_document_db.sql`、`06_notification_db.sql`。
+- **移除 Kafka + Zookeeper 基础设施**：删除 `deploy/docker-compose.yml` 中的 `mm-kafka` / `mm-zookeeper` 服务与 `mm-kafka-data` 卷；同步清理 auth / book / demo / music / video / flask 六个服务的 `spring-cloud-starter-bus-kafka`、`spring-kafka` 依赖，`spring.kafka` 与 `spring.cloud.bus` 配置，`KafkaProducerConfig` 类，以及 auth-service（4 处）与 demo-service（1 处）的 Kafka 消息发送代码。基础设施现仅保留 **MySQL / Redis / MinIO**。
+- **移除前端「消息中心」**：`/content/message` 页面、`lib/websocket.ts`、`stores/messageStore.ts`、`components/user/MessageList.tsx`、`UserLayout` 导航入口与顶栏铃铛、首页通知卡片、`AuthBootstrap` 与登录页/个人页的 WebSocket 调用，以及 `next.config.mjs` 的 `/ws` 代理与 `.env.example` 的 `WS_URL`。
+- **移除 `config-service`**：删除该 Maven 模块、父 pom 条目与启停脚本条目；同步清理 agent / auth / book / demo / music / video 六个服务的 `spring-cloud-starter-config` 依赖、`spring.cloud.config` 配置块，以及 4 个服务 `DataSourceConfig` 上的 `@RefreshScope` 注解（无配置中心后已无意义）。各服务改为完全依赖本地 `application.yml`。
+- **移除人脸识别登录**：删除 `flask-service` 模块（其唯一职责是人脸登录的 Python 桥接）与网关 `/v1/flask/**` 路由；删除 auth-service 的 `/v1/auth/login/faceLogin` 接口、`LoginService.faceLogin` 方法与 `Service/FlaskService`（连同仅其使用的 `jettison` 依赖，并移出网关 JWT 白名单）；删除前端登录页的人脸 Tab、摄像头拍照逻辑、`faceLoginService` 与 `api/login.ts` 中的人脸封装；删除 `MediaMinds_py/FaceIdentity.ipynb` 与 `face_db/`。登录方式保留**账号密码**与**邮箱验证码**。
+- **移除 `PAPER.md`**：该论文正文描述的是早期架构（Vue.js 前端、讯飞星火大模型、InsightFace 人脸登录、文档服务、Kafka、RBAC 多角色），与当前实现严重不符，已从仓库删除；同步清理 README 与 PROJECT_DESCRIPTION 中对它的引用。
+- **移除内容管理页与图表依赖**：删除整个 `/content/manage`（控制面板 / 用户 / 图书 / 音乐 / 视频共 12 个页面）、`components/manage/`（CrudManager、UploadAction）、`components/common/DataTable.tsx` 与 `EChart.tsx`；从 `package.json` 移除 `echarts` / `echarts-for-react`（约 54 MB 依赖、单页编译 3400+ 模块）；`api/manage.ts` 精简为 `api/stats.ts`（仅保留首页内容统计），`api/user.ts` 移除用户管理接口。左侧导航收敛为 **首页 / 图书浏览 / 视频浏览 / 音乐浏览 / 智能入库 / 个人信息**。
 
 ### Fixed
 - 修正 Next.js 主题阴影层级不足（`theme.shadows` 需 25 级）导致的 MUI `elevation` 报错。

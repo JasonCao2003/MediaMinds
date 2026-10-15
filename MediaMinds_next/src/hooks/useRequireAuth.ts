@@ -4,10 +4,9 @@ import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
 /**
- * 单用户模式：仅校验登录态，不再做角色判断。
- * （保留 options 参数以兼容既有调用签名）
+ * 登录守卫：仅校验登录态（单角色，无权限区分）。
  */
-export function useRequireAuth(_options: { admin?: boolean } = {}) {
+export function useRequireAuth() {
   const router = useRouter();
   const pathname = usePathname();
 

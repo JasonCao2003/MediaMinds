@@ -1,5 +1,4 @@
 import request, { type ApiResult } from '@/lib/request';
-import type { PageResult } from '@/types';
 
 export interface RegisterData {
   userName: string;
@@ -14,7 +13,6 @@ export interface UserItem {
   userName?: string;
   nickName?: string;
   email?: string;
-  role?: string;
   status?: string | number;
   avatar?: string;
   birthday?: string;
@@ -28,7 +26,7 @@ export interface UserItem {
 export const userRegisterService = (data: RegisterData) =>
   request.post<ApiResult<void>>('/v1/auth/user/register', data);
 
-/** 获取当前用户详情（含角色） */
+/** 获取当前用户详情 */
 export const userInfoService = () =>
   request.get<ApiResult<UserItem>>('/v1/auth/user/getUser');
 
@@ -38,7 +36,6 @@ export const userInfoUpdateService = (data: UserItem) =>
     userName: data.userName,
     nickName: data.nickName,
     email: data.email,
-    role: data.role,
     birthday: data.birthday,
     sex: data.sex,
     avatar: data.avatar,
@@ -69,24 +66,3 @@ export const userPwdUpdateService = (data: { oldPassword: string; newPassword: s
 /** 注销账号 */
 export const userDeleteService = () =>
   request.post<ApiResult<void>>('/v1/auth/user/deleteUser');
-
-// ============= 管理员用户管理接口 =============
-
-export const adminGetUserListService = (params: Record<string, unknown>) =>
-  request.get<ApiResult<PageResult<UserItem>>>('/v1/auth/user/list', { params });
-
-export const adminUpdateUserRoleService = (userId: number | string, role: string) =>
-  request.post<ApiResult<void>>(
-    `/v1/auth/user/updateRole?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`,
-  );
-
-export const adminUpdateUserStatusService = (userId: number | string, status: string | number) =>
-  request.post<ApiResult<void>>(
-    `/v1/auth/user/updateStatus?userId=${encodeURIComponent(userId)}&status=${encodeURIComponent(status)}`,
-  );
-
-export const adminDeleteUserService = (userId: number | string) =>
-  request.delete<ApiResult<void>>(`/v1/auth/user/delete/${userId}`);
-
-export const adminAddUserService = (data: UserItem) =>
-  request.post<ApiResult<void>>('/v1/auth/user/add', data);

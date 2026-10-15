@@ -2,7 +2,6 @@ package com.xupt.book.Controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xupt.book.DTO.Result;
-import com.xupt.book.Filter.RoleCheck;
 import com.xupt.book.Pojo.Collect;
 import com.xupt.book.Pojo.Song;
 import com.xupt.book.Service.CollectService;
@@ -99,7 +98,6 @@ public class CollectController {
     }
 
 
-    @RoleCheck("admin")
     @Operation(summary = "查询全部收藏记录（分页）", description = "管理员权限，分页查询所有收藏记录")
     @GetMapping("/all")
     public Result<Page<Collect>> allCollection(

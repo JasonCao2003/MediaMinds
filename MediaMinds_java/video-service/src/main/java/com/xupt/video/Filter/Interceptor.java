@@ -18,19 +18,16 @@ public class Interceptor implements HandlerInterceptor {
         // 从请求头中获取用户信息
         String userId = request.getHeader("X-UserId");
         String userName = request.getHeader("X-UserName");
-        String role = request.getHeader("X-Role");
 
-        if (userId != null && userName != null && role != null) {
+        if (userId != null && userName != null) {
             // 将用户信息存入 ThreadLocal，以便后续处理
             Map<String, Object> claims = Map.of(
                 "userId", userId,
-                "userName", userName,
-                "role", role
+                "userName", userName
             );
             ThreadLocalUtil.set(claims);
         }
 
-        // 单用户模式：不再进行角色校验（原 @RoleCheck 保留为文档标记）
         return true;
     }
 

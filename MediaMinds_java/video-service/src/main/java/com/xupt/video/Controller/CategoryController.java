@@ -2,7 +2,6 @@ package com.xupt.video.Controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xupt.video.DTO.Result;
-import com.xupt.video.Filter.RoleCheck;
 import com.xupt.video.Pojo.Category;
 import com.xupt.video.Pojo.Movie;
 import com.xupt.video.Service.CategoryService;
@@ -47,7 +46,6 @@ public class CategoryController {
     }
 
     // 新增分类
-    @RoleCheck("admin")
     @Operation(summary = "新增分类", description = "管理员权限，添加新的电影分类")
     @PostMapping
     public Result<?> addCategory(
@@ -56,7 +54,6 @@ public class CategoryController {
     }
 
     // 修改分类
-    @RoleCheck("admin")
     @Operation(summary = "修改分类", description = "管理员权限，更新指定分类的信息")
     @PutMapping
     public Result<?> updateCategory(
@@ -65,7 +62,6 @@ public class CategoryController {
     }
 
     // 删除分类
-    @RoleCheck("admin")
     @Operation(summary = "删除分类", description = "管理员权限，根据分类 ID 删除分类")
     @DeleteMapping("/{id}")
     public Result<?> deleteCategory(

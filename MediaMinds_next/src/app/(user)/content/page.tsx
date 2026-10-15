@@ -9,7 +9,6 @@ import {
   Card,
   CardContent,
   Chip,
-  Divider,
   Skeleton,
   Stack,
   Typography,
@@ -19,13 +18,9 @@ import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
 import MovieRoundedIcon from '@mui/icons-material/MovieRounded';
 import HeadphonesRoundedIcon from '@mui/icons-material/HeadphonesRounded';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
-import NotificationsActiveRoundedIcon from '@mui/icons-material/NotificationsActiveRounded';
-import WifiRoundedIcon from '@mui/icons-material/WifiRounded';
-import WifiOffRoundedIcon from '@mui/icons-material/WifiOffRounded';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import { useAuthStore } from '@/stores/authStore';
-import { getContentCategoryService } from '@/api/admin';
-import websocketService from '@/lib/websocket';
+import { getContentCategoryService } from '@/api/stats';
 
 const QUOTES = [
   { text: '生活不是等待风暴过去，而是学会在雨中跳舞。', author: '薇薇安·格林' },
@@ -106,7 +101,6 @@ export default function WelcomePage() {
 
   const [now, setNow] = useState<Date | null>(null);
   const [stats, setStats] = useState({ books: 0, videos: 0, music: 0, loading: true });
-  const [connected, setConnected] = useState(false);
 
   const quote = useMemo(() => QUOTES[Math.floor(Math.random() * QUOTES.length)], []);
 
@@ -122,10 +116,6 @@ export default function WelcomePage() {
         setStats({ books: res.books || 0, videos: res.movies || 0, music: res.songs || 0, loading: false }),
       )
       .catch(() => setStats({ books: 1245, videos: 857, music: 1634, loading: false }));
-
-    setConnected(websocketService.connected);
-    const t = setInterval(() => setConnected(websocketService.connected), 3000);
-    return () => clearInterval(t);
   }, []);
 
   const greeting = now ? greetingOf(now.getHours()) : '你好';
@@ -310,38 +300,6 @@ export default function WelcomePage() {
               sx={{ bgcolor: '#fff', color: '#7C3AED', '&:hover': { bgcolor: 'rgba(255,255,255,.9)' } }}
             >
               前往个人空间
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card
-          sx={{
-            borderRadius: 4,
-            color: '#fff',
-            background: 'linear-gradient(135deg, #2563EB 0%, #60A5FA 100%)',
-          }}
-        >
-          <CardContent sx={{ p: 4 }}>
-            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
-              <Typography variant="h5" fontWeight={700}>
-                消息通知
-              </Typography>
-              <Chip
-                size="small"
-                icon={connected ? <WifiRoundedIcon /> : <WifiOffRoundedIcon />}
-                label={connected ? '已连接' : '未连接'}
-                sx={{ bgcolor: 'rgba(255,255,255,.22)', color: '#fff' }}
-              />
-            </Stack>
-            <Divider sx={{ borderColor: 'rgba(255,255,255,.25)', mb: 2 }} />
-            <Typography sx={{ opacity: 0.9, mb: 3 }}>实时接收系统通知与消息推送。</Typography>
-            <Button
-              variant="contained"
-              startIcon={<NotificationsActiveRoundedIcon />}
-              onClick={() => router.push('/content/message')}
-              sx={{ bgcolor: '#fff', color: '#2563EB', '&:hover': { bgcolor: 'rgba(255,255,255,.9)' } }}
-            >
-              进入消息中心
             </Button>
           </CardContent>
         </Card>

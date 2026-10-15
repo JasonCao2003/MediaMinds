@@ -16,19 +16,6 @@ spring:
       port: 6379
       password:
       database: 0
-  # Kafka
-  kafka:
-    bootstrap-servers: localhost:9092
-  # Bus
-  cloud:
-    config:
-      enabled: false
-      import-check:
-        enabled: false
-    bus:
-      enabled: true
-      refresh:
-        enabled: true
   # Mail
   mail:
     host: smtp.qq.com

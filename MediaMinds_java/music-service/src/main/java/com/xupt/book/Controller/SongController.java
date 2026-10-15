@@ -2,7 +2,6 @@ package com.xupt.book.Controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.xupt.book.DTO.Result;
-import com.xupt.book.Filter.RoleCheck;
 import com.xupt.book.Pojo.Song;
 import com.xupt.book.Service.SongService;
 import com.xupt.book.Utils.MinioUtil;
@@ -76,7 +75,6 @@ public class SongController {
         return Result.success(count);
     }
 
-    @RoleCheck("admin")
     @Operation(summary = "新增歌曲", description = "上传音乐文件并新增歌曲信息")
     @PostMapping("")
     public Result<?> addSong(
@@ -95,7 +93,6 @@ public class SongController {
         return res ? Result.success(filePath) : Result.error("上传失败，数据库插入失败");
     }
 
-    @RoleCheck("admin")
     @Operation(summary = "删除歌曲", description = "根据歌曲 ID 删除歌曲")
     @DeleteMapping("/{id}")
     public Result<?> deleteSong(@Parameter(description = "歌曲 ID") @PathVariable Integer id) {
@@ -103,7 +100,6 @@ public class SongController {
         return res ? Result.success("删除成功") : Result.error("删除失败");
     }
 
-    @RoleCheck("admin")
     @Operation(summary = "更新歌曲信息", description = "根据歌曲 ID 更新歌曲详细信息")
     @PutMapping("/{id}")
     public Result<?> updateSong(
@@ -115,7 +111,6 @@ public class SongController {
         return res ? Result.success("修改成功") : Result.error("修改失败");
     }
 
-    @RoleCheck("admin")
     @Operation(summary = "上传歌曲封面", description = "上传图片并更新歌曲封面")
     @PostMapping("/{id}/cover")
     public Result<?> uploadSongCover(
@@ -131,7 +126,6 @@ public class SongController {
         return res ? Result.success(filePath) : Result.error("上传失败，数据库更新失败");
     }
 
-    @RoleCheck("admin")
     @Operation(summary = "上传歌曲文件", description = "上传音频文件并更新歌曲地址")
     @PostMapping("/{id}/file")
     public Result<?> uploadSongFile(

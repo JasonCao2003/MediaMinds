@@ -2,7 +2,6 @@ package com.xupt.video.Controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xupt.video.DTO.Result;
-import com.xupt.video.Filter.RoleCheck;
 import com.xupt.video.Pojo.Movie;
 import com.xupt.video.Service.MovieService;
 import com.xupt.video.Utils.MinioUtil;
@@ -80,7 +79,6 @@ public class MovieController {
     }
 
     // 新增电影信息
-    @RoleCheck("admin")
     @Operation(summary = "新增电影", description = "管理员权限，添加新的电影信息")
     @PostMapping
     public Result<?> addMovie(
@@ -89,7 +87,6 @@ public class MovieController {
     }
 
     // 修改电影信息
-    @RoleCheck("admin")
     @Operation(summary = "修改电影信息", description = "管理员权限，更新指定电影的信息")
     @PutMapping
     public Result<?> updateMovie(
@@ -98,7 +95,6 @@ public class MovieController {
     }
 
     // 修改电影封面
-    @RoleCheck("admin")
     @Operation(summary = "修改电影封面", description = "管理员权限，更新指定电影的封面")
     @PutMapping("/cover")
     public Result<?> updateCover(
@@ -111,7 +107,6 @@ public class MovieController {
     }
 
     // 修改电影视频
-    @RoleCheck("admin")
     @Operation(summary = "修改电影视频", description = "管理员权限，更新指定电影的视频文件")
     @PutMapping("/video")
     public Result<?> updateVideo(
@@ -124,7 +119,6 @@ public class MovieController {
     }
 
     // 删除电影信息
-    @RoleCheck("admin")
     @Operation(summary = "删除电影", description = "管理员权限，根据电影 ID 删除电影信息")
     @DeleteMapping("/{id}")
     public Result<?> deleteMovie(

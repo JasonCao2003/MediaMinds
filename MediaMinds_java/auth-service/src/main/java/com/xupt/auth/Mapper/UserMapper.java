@@ -22,15 +22,6 @@ public interface UserMapper extends BaseMapper<User> {
 
 
     /**
-     * 更新用户角色
-     * @param userId 用户ID
-     * @param role 角色
-     * @return 影响行数
-     */
-    @Update("UPDATE user SET role=#{role}, updated_at=now() WHERE user_id=#{userId}")
-    int updateUserRole(@Param("userId") String userId, @Param("role") String role);
-
-    /**
      * 更新用户状态
      * @param userId 用户ID
      * @param status 状态

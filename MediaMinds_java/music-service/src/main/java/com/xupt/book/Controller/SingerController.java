@@ -1,7 +1,6 @@
 package com.xupt.book.Controller;
 
 import com.xupt.book.DTO.Result;
-import com.xupt.book.Filter.RoleCheck;
 import com.xupt.book.Pojo.Singer;
 import com.xupt.book.Service.SingerService;
 import com.xupt.book.Utils.MinioUtil;
@@ -25,7 +24,6 @@ public class SingerController {
     @Resource
     private SingerService singerService;
 
-    @RoleCheck("admin")
     @Operation(summary = "添加歌手", description = "新增一名歌手")
     @PostMapping
     public Result<?> addSinger(@RequestBody Singer singer) {
@@ -63,7 +61,6 @@ public class SingerController {
         return Result.success(singerService.singerOfSex(sex, pageNum, pageSize));
     }
 
-    @RoleCheck("admin")
     @Operation(summary = "删除歌手", description = "根据歌手 ID 删除指定歌手")
     @DeleteMapping("/{id}")
     public Result<?> deleteSinger(
@@ -72,7 +69,6 @@ public class SingerController {
         return res ? Result.success("删除成功") : Result.error("删除失败");
     }
 
-    @RoleCheck("admin")
     @Operation(summary = "更新歌手信息", description = "修改指定歌手的信息")
     @PutMapping("")
     public Result<?> updateSingerMsg(@RequestBody Singer singer) {
@@ -83,7 +79,6 @@ public class SingerController {
         return res ? Result.success("修改成功") : Result.error("修改失败");
     }
 
-    @RoleCheck("admin")
     @Operation(summary = "上传歌手头像", description = "上传并更新歌手头像")
     @PostMapping("/{id}/avatar")
     public Result<?> updateSingerPic(

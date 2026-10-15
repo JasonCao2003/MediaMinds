@@ -8,7 +8,6 @@ import {
   Button,
   Card,
   CardContent,
-  Chip,
   Divider,
   FormControl,
   InputLabel,
@@ -32,7 +31,6 @@ import { useConfirm } from '@/components/common/ConfirmProvider';
 import AutoGrid from '@/components/common/AutoGrid';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from '@/lib/notify';
-import websocketService from '@/lib/websocket';
 import {
   userInfoService,
   userInfoUpdateService,
@@ -49,7 +47,6 @@ interface ProfileForm {
   sex: string;
   birthday: string;
   introduction: string;
-  role: string;
 }
 
 export default function UserProfilePage() {
@@ -66,7 +63,6 @@ export default function UserProfilePage() {
     sex: '',
     birthday: '',
     introduction: '',
-    role: 'user',
   });
   const original = useRef<ProfileForm | null>(null);
   const [saving, setSaving] = useState(false);
@@ -85,7 +81,6 @@ export default function UserProfilePage() {
       sex: info?.sex || '',
       birthday: info?.birthday ? String(info.birthday).slice(0, 10) : '',
       introduction: info?.introduction || '',
-      role: info?.role || 'user',
     };
     setForm(f);
     original.current = { ...f };
@@ -137,7 +132,6 @@ export default function UserProfilePage() {
         sex: form.sex,
         birthday: form.birthday,
         introduction: form.introduction,
-        role: form.role,
       });
       if (res.code === 200) {
         toast.success('个人信息已更新');
@@ -180,7 +174,6 @@ export default function UserProfilePage() {
     const res = await userDeleteService();
     if (res.code === 200) {
       toast.success('账号已注销');
-      websocketService.disconnect();
       logout();
       router.replace('/login');
     }
@@ -227,7 +220,6 @@ export default function UserProfilePage() {
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
               {form.email || '未绑定邮箱'}
             </Typography>
-            <Chip label={form.role === 'admin' ? '管理员' : '普通用户'} color={form.role === 'admin' ? 'success' : 'default'} />
           </CardContent>
         </Card>
 

@@ -36,15 +36,11 @@
         <module>gateway-service</module>
         <module>discovery-service</module>
         <module>auth-service</module>
-        <module>config-service</module>
-        <module>notification-service</module>
         <module>demo-service</module>
         <module>music-service</module>
         <module>book-service</module>
-        <module>flask-service</module>
         <module>video-service</module>
         <module>agent-service</module>
-        <module>document-service</module>
     </modules>
 
     <scm>

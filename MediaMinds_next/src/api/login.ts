@@ -22,9 +22,3 @@ export const loginValidationService = (data: { email: string }) => {
   params.append('email', data.email);
   return request.post<ApiResult<void>>('/v1/auth/login/sendValidation', params);
 };
-
-/** 人脸登录 */
-export const faceLoginService = (formData: FormData) =>
-  request.post<ApiResult<string>>('/v1/auth/login/faceLogin', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });

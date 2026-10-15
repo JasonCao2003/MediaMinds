@@ -8,7 +8,6 @@ export interface UserInfo {
   userName?: string;
   nickName?: string;
   email?: string;
-  role?: 'user' | 'admin' | string;
   birthday?: string;
   sex?: string;
   avatar?: string;
@@ -23,7 +22,6 @@ interface AuthState {
   setInfo: (info: UserInfo) => void;
   removeInfo: () => void;
   logout: () => void;
-  isAdmin: () => boolean;
   isLoggedIn: () => boolean;
 }
 
@@ -37,10 +35,9 @@ export const useAuthStore = create<AuthState>()(
       setInfo: (info) => set({ info }),
       removeInfo: () => set({ info: {} }),
       logout: () => set({ token: '', info: {} }),
-      isAdmin: () => get().info?.role === 'admin',
       isLoggedIn: () => {
         const { info } = get();
-        return Boolean(info?.userId || (info?.userName && info?.role) || (info?.email && info?.role));
+        return Boolean(info?.userId || info?.userName || info?.email);
       },
     }),
     {
@@ -50,5 +47,5 @@ export const useAuthStore = create<AuthState>()(
   ),
 );
 
-/** 供非 React 环境（axios / websocket）读取 token */
+/** 供非 React 环境（axios 等）读取 token */
 export const getToken = () => useAuthStore.getState().token;

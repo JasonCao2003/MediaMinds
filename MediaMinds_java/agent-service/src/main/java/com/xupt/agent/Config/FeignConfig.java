@@ -8,13 +8,12 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
- * 把网关下发的用户上下文（X-UserId / X-UserName / X-Role）透传给下游数据源服务，
- * 这样下游的 @RoleCheck 权限校验对当前用户依然生效。
+ * 把网关下发的用户上下文（X-UserId / X-UserName）透传给下游数据源服务。
  */
 @Configuration
 public class FeignConfig {
 
-    private static final String[] HEADERS = {"X-UserId", "X-UserName", "X-Role", "Authorization"};
+    private static final String[] HEADERS = {"X-UserId", "X-UserName", "Authorization"};
 
     @Bean
     public RequestInterceptor userContextForwarder() {

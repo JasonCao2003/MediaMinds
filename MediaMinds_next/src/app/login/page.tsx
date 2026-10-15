@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -13,7 +13,6 @@ import {
   Tab,
   Divider,
   Stack,
-  IconButton,
   Alert,
   CircularProgress,
   Avatar,
@@ -23,8 +22,6 @@ import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import LockRoundedIcon from '@mui/icons-material/LockRounded';
 import MailRoundedIcon from '@mui/icons-material/MailRounded';
 import BadgeRoundedIcon from '@mui/icons-material/BadgeRounded';
-import FaceRetouchingNaturalRoundedIcon from '@mui/icons-material/FaceRetouchingNaturalRounded';
-import PhotoCameraRoundedIcon from '@mui/icons-material/PhotoCameraRounded';
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import AutoStoriesRoundedIcon from '@mui/icons-material/AutoStoriesRounded';
 import HeadphonesRoundedIcon from '@mui/icons-material/HeadphonesRounded';
@@ -33,15 +30,9 @@ import BrandLogo from '@/components/BrandLogo';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from '@/lib/notify';
 import { userRegisterService, userInfoService } from '@/api/user';
-import {
-  accountLoginService,
-  emailLoginService,
-  loginValidationService,
-  faceLoginService,
-} from '@/api/login';
-import websocketService from '@/lib/websocket';
+import { accountLoginService, emailLoginService, loginValidationService } from '@/api/login';
 
-type LoginType = 'account' | 'email' | 'face';
+type LoginType = 'account' | 'email';
 
 const FEATURES = [
   { icon: <AutoStoriesRoundedIcon />, title: '智能图书管理', desc: '自动章节划分 · 在线阅读器 · 内容分析' },
@@ -66,9 +57,6 @@ export default function LoginPage() {
   });
 
   const [countdown, setCountdown] = useState(0);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const [cameraOpen, setCameraOpen] = useState(false);
 
   const redirect = useMemo(() => {
     if (typeof window === 'undefined') return '/content';
@@ -81,12 +69,6 @@ export default function LoginPage() {
     return () => clearInterval(t);
   }, [countdown]);
 
-  useEffect(() => {
-    return () => {
-      mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
-    };
-  }, []);
-
   const update = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
@@ -94,7 +76,6 @@ export default function LoginPage() {
     const res = await userInfoService();
     if (res.code === 200 && res.data) {
       setInfo(res.data);
-      websocketService.connect();
       router.replace(redirect || '/content');
     } else {
       toast.error(res.msg || '获取用户信息失败');
@@ -151,50 +132,6 @@ export default function LoginPage() {
     } catch {
       /* ignore */
     }
-  };
-
-  const openCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      mediaStreamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-      setCameraOpen(true);
-    } catch {
-      toast.error('无法打开摄像头，请检查设备权限');
-    }
-  };
-
-  const closeCamera = () => {
-    mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
-    mediaStreamRef.current = null;
-    setCameraOpen(false);
-  };
-
-  const takePhoto = () => {
-    if (!videoRef.current || !cameraOpen) return;
-    const video = videoRef.current;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(async (blob) => {
-      if (!blob) return;
-      closeCamera();
-      const formData = new FormData();
-      formData.append('image', new File([blob], 'face.jpg', { type: 'image/jpeg' }));
-      setLoading(true);
-      try {
-        const res = await faceLoginService(formData);
-        if (res.code === 200) {
-          setToken(res.data);
-          await afterLogin();
-        }
-      } catch {
-        /* ignore */
-      } finally {
-        setLoading(false);
-      }
-    }, 'image/jpeg');
   };
 
   const handleRegister = async () => {
@@ -260,7 +197,7 @@ export default function LoginPage() {
             更简单、更智能
           </Typography>
           <Typography variant="h6" sx={{ opacity: 0.85, fontWeight: 400, mb: 5 }}>
-            一站式书影音资源平台 · 融合大模型、语音识别与人脸识别
+            一站式书影音资源平台 · 融合大模型与语音识别
           </Typography>
 
           <Stack spacing={2.5}>
@@ -388,7 +325,6 @@ export default function LoginPage() {
                 {[
                   { value: 'account', label: '账号', icon: <PersonRoundedIcon fontSize="small" /> },
                   { value: 'email', label: '邮箱', icon: <MailRoundedIcon fontSize="small" /> },
-                  { value: 'face', label: '人脸', icon: <FaceRetouchingNaturalRoundedIcon fontSize="small" /> },
                 ].map((t) => (
                   <Tab
                     key={t.value}
@@ -480,64 +416,6 @@ export default function LoginPage() {
                 </Stack>
               )}
 
-              {loginType === 'face' && (
-                <Stack spacing={2.5} alignItems="center">
-                  <Box
-                    sx={{
-                      width: '100%',
-                      aspectRatio: '4 / 3',
-                      borderRadius: 4,
-                      overflow: 'hidden',
-                      bgcolor: 'action.hover',
-                      display: 'grid',
-                      placeItems: 'center',
-                      position: 'relative',
-                      border: '1px dashed',
-                      borderColor: 'divider',
-                    }}
-                  >
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        display: cameraOpen ? 'block' : 'none',
-                        transform: 'scaleX(-1)',
-                      }}
-                    />
-                    {!cameraOpen && (
-                      <Stack alignItems="center" spacing={1} sx={{ color: 'text.secondary' }}>
-                        <FaceRetouchingNaturalRoundedIcon sx={{ fontSize: 56, opacity: 0.4 }} />
-                        <Typography variant="body2">点击下方按钮开启摄像头进行人脸识别登录</Typography>
-                      </Stack>
-                    )}
-                    {loading && (
-                      <Box sx={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', bgcolor: 'rgba(0,0,0,.35)' }}>
-                        <CircularProgress sx={{ color: '#fff' }} />
-                      </Box>
-                    )}
-                  </Box>
-                  {!cameraOpen ? (
-                    <Button variant="contained" fullWidth size="large" onClick={openCamera} startIcon={<PhotoCameraRoundedIcon />}>
-                      打开摄像头
-                    </Button>
-                  ) : (
-                    <Stack direction="row" spacing={2} sx={{ width: '100%' }}>
-                      <Button fullWidth color="inherit" onClick={closeCamera}>
-                        取消
-                      </Button>
-                      <Button fullWidth variant="contained" color="success" onClick={takePhoto} disabled={loading}>
-                        拍照登录
-                      </Button>
-                    </Stack>
-                  )}
-                </Stack>
-              )}
-
               <Divider sx={{ my: 3 }}>
                 <Typography variant="caption" color="text.secondary">
                   还没有账户？
@@ -550,7 +428,7 @@ export default function LoginPage() {
           )}
 
           <Alert severity="info" variant="outlined" sx={{ mt: 3, borderRadius: 3 }}>
-            用户名与密码长度均为 5~16 位；人脸登录需后端 InsightFace 服务在线。
+            用户名与密码长度均为 5~16 位；邮箱登录需先绑定邮箱。
           </Alert>
         </Paper>
       </Box>

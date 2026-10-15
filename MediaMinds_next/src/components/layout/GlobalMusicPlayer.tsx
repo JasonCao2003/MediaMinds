@@ -26,7 +26,6 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import MusicNoteRoundedIcon from '@mui/icons-material/MusicNoteRounded';
 import { usePlayerStore } from '@/stores/playerStore';
-import { useAuthStore } from '@/stores/authStore';
 
 function formatTime(sec: number) {
   if (!Number.isFinite(sec) || sec < 0) return '00:00';
@@ -50,7 +49,6 @@ export default function GlobalMusicPlayer() {
 
   const { playlist, current, currentIndex, playing, next, prev, setPlaying, removeFromPlaylist, setIndex } =
     usePlayerStore();
-  const role = useAuthStore((s) => s.info?.role);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -73,8 +71,6 @@ export default function GlobalMusicPlayer() {
     }
   }, [volume, muted]);
 
-  // 非普通用户不显示播放器（与 Vue 版一致）
-  if (role && role !== 'user') return null;
   if (playlist.length === 0) return null;
 
   const handleTimeUpdate = () => {

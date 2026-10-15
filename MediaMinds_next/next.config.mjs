@@ -3,7 +3,6 @@
 // 后端网关地址，可通过环境变量覆盖
 const GATEWAY = process.env.GATEWAY_URL || 'http://localhost:8080';
 const MINIO = process.env.MINIO_URL || 'http://localhost:9000';
-const WS = process.env.WS_URL || 'http://localhost:9001';
 
 const nextConfig = {
   reactStrictMode: true,
@@ -16,7 +15,7 @@ const nextConfig = {
       { protocol: 'http', hostname: '**' },
     ],
   },
-  // 与 Vue 版本保持一致的开发代理：/api -> 网关，/oss -> MinIO，/ws -> 通知服务
+  // 开发代理：/api -> 网关，/oss -> MinIO
   async rewrites() {
     return [
       {
@@ -26,10 +25,6 @@ const nextConfig = {
       {
         source: '/oss/:path*',
         destination: `${MINIO}/mediaminds/:path*`,
-      },
-      {
-        source: '/ws/:path*',
-        destination: `${WS}/ws/:path*`,
       },
     ];
   },
