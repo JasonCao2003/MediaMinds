@@ -1,5 +1,59 @@
+server:
+  port: 9007
 spring:
   application:
     name: video-service
-  config:
-    import: configserver:http://localhost:8888
+  # MySQL
+  datasource:
+    url: jdbc:mysql://localhost:3306/video_db?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=UTF-8&useSSL=false
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  # Kafka
+  kafka:
+    bootstrap-servers: localhost:9092
+  # Bus
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
+    bus:
+      enabled: true
+      refresh:
+        enabled: true
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+# Eureka
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+# mybatis-plus
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+knife4j:
+  enable: true
+  setting:
+    language: zh-CN
+
+# TMDB 影视接入配置（二选一鉴权，建议使用 Access Token）
+tmdb:
+  api-key: ${TMDB_API_KEY:}
+  access-token: ${TMDB_ACCESS_TOKEN:}
+  language: zh-CN
+  poster-size: w500
+  backdrop-size: w780
+  # 导入时是否把海报下载到 MinIO（false 则直接保存 TMDB 图片地址）
+  import-download-image: true

@@ -7,7 +7,7 @@ import com.xupt.book.Mapper.BookChapterMapper;
 import com.xupt.book.Mapper.BookMapper;
 import com.xupt.book.Pojo.BookChapter;
 import com.xupt.book.Pojo.Book;
-import com.xupt.book.Utils.AliOssUtil;
+import com.xupt.book.Utils.MinioUtil;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
@@ -170,7 +170,7 @@ public class BookChapterService {
             
             // 从阿里云OSS获取内容
             try {
-                String content = AliOssUtil.downloadFile(contentPath);
+                String content = MinioUtil.downloadFile(contentPath);
                 return Result.success(content);
             } catch (Exception e) {
                 e.printStackTrace(); // 打印详细错误堆栈便于调试

@@ -1,5 +1,60 @@
+server:
+  port: 9005
 spring:
   application:
     name: music-service
-  config:
-    import: configserver:http://localhost:8888
+  # MySQL
+  datasource:
+    url: jdbc:mysql://localhost:3306/music_data?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=UTF-8&useSSL=false
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  # Kafka
+  kafka:
+    bootstrap-servers: localhost:9092
+  # Bus
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
+    bus:
+      enabled: true
+      refresh:
+        enabled: true
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+# Eureka
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+# mybatis-plus
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+knife4j:
+  enable: true
+  setting:
+    language: zh-CN
+
+# 酷狗音乐接入配置（登录态可读环境变量，见 KugouProperties）
+kugou:
+  token: ${KUGOU_TOKEN:}
+  userid: ${KUGOU_USERID:0}
+  dfid: ${KUGOU_DFID:-}
+  vip-token: ${KUGOU_VIP_TOKEN:}
+  vip-type: ${KUGOU_VIP_TYPE:0}
+  # 导入本地库时是否把音频下载到 MinIO（false 则仅保存酷狗播放直链）
+  import-download-audio: false
+  download-timeout-seconds: 120

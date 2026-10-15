@@ -5,7 +5,7 @@ import com.xupt.book.DTO.Result;
 import com.xupt.book.Filter.RoleCheck;
 import com.xupt.book.Pojo.Book;
 import com.xupt.book.Service.BookService;
-import com.xupt.book.Utils.AliOssUtil;
+import com.xupt.book.Utils.MinioUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -95,7 +95,7 @@ public class BookController {
             @Parameter(description = "封面图片", required = true) @RequestParam("image") MultipartFile file) throws Exception {
         // 上传至阿里云
         String filename = "book/" + UUID.randomUUID() + ".jpg";
-        String filePath = AliOssUtil.UploadFile(filename, file.getInputStream());
+        String filePath = MinioUtil.UploadFile(filename, file.getInputStream());
         return bookService.updateCover(bookId, filePath);
     }
 

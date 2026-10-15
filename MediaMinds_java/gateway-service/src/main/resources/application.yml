@@ -43,11 +43,11 @@ spring:
           uri: lb://video-service
           predicates:
             - Path=/v1/video/**
-        # Spark服务 9008
-        - id: spark-service
-          uri: lb://spark-service
+        # Agent服务 9011
+        - id: agent-service
+          uri: lb://agent-service
           predicates:
-            - Path=/v1/spark/**
+            - Path=/v1/agent/**
         # Document服务 9009
         - id: document-service
           uri: lb://document-service
@@ -55,6 +55,8 @@ spring:
             - Path=/v1/document/**
 # Eureka
 eureka:
+  instance:
+    prefer-ip-address: true
   client:
     service-url:
       defaultZone: http://127.0.0.1:8761/eureka

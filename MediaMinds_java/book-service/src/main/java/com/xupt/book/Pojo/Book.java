@@ -20,4 +20,6 @@ public class Book {
     private Integer chapterCount;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+    /** 数据来源标记，如 Project Gutenberg */
+    private String source;
 }

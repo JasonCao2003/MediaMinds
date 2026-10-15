@@ -3,10 +3,8 @@ package com.xupt.book.Controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xupt.book.DTO.Result;
 import com.xupt.book.Pojo.SongList;
-import com.xupt.book.Service.RecommendService;
 import com.xupt.book.Service.SongListService;
-import com.xupt.book.Utils.AliOssUtil;
-import com.xupt.book.Utils.ThreadLocalUtil;
+import com.xupt.book.Utils.MinioUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -14,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.annotation.Resource;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -27,9 +24,6 @@ public class SongListController {
 
     @Resource
     private SongListService songListService;
-
-    @Resource
-    private RecommendService recommendService;
 
     @Operation(summary = "添加歌单", description = "新增一个歌单")
     @PostMapping
@@ -44,23 +38,6 @@ public class SongListController {
         Page<SongList> page = songListService.allSongList(pageNum, pageSize);
         return Result.success(page);
     }
-
-    @Operation(summary = "获取推荐歌单", description = "根据用户 ID 获取推荐歌单")
-    @GetMapping("/recommend")
-    public Result<?> getRecommendedSongLists() {
-        Map<String, Object> claims = ThreadLocalUtil.get();
-        String userId = claims.get("userId").toString();
-
-        if (userId.isBlank() || "null".equals(userId)) {
-            return Result.success(songListService.allSongList(1, 10));  // 默认第一页，10条数据
-        }
-        try {
-            return Result.success(recommendService.recommendSongListByCollect(userId));
-        } catch (NumberFormatException e) {
-            return Result.error("用户 ID 格式错误");
-        }
-    }
-
 
     @Operation(summary = "根据标题模糊查询歌单", description = "分页返回标题包含指定文字的歌单")
     @GetMapping("/like-title")
@@ -102,7 +79,7 @@ public class SongListController {
         }
 
         String filename = UUID.randomUUID() + ".jpg";
-        String filePath = AliOssUtil.UploadFile(filename, avatarFile.getInputStream());
+        String filePath = MinioUtil.UploadFile(filename, avatarFile.getInputStream());
         SongList songList = new SongList();
         songList.setId(id);
         songList.setPic(filePath);

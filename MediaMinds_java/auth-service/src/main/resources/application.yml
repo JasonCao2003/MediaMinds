@@ -1,9 +1,35 @@
+server:
+  port: 9003
 spring:
   application:
     name: auth-service
-  config:
-    import: configserver:http://localhost:8888
-# Mail
+  # MySQL
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/user_db?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=UTF-8&useSSL=false
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  # Redis
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      database: 0
+  # Kafka
+  kafka:
+    bootstrap-servers: localhost:9092
+  # Bus
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
+    bus:
+      enabled: true
+      refresh:
+        enabled: true
+  # Mail
   mail:
     host: smtp.qq.com
     port: 587
@@ -15,3 +41,27 @@ spring:
           auth: true
           starttls:
             enable: true
+# Actuator
+management:
+  health:
+    mail:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+# Eureka
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: http://127.0.0.1:8761/eureka
+# mybatis-plus
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: ASSIGN_ID

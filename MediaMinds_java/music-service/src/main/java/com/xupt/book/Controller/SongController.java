@@ -5,8 +5,7 @@ import com.xupt.book.DTO.Result;
 import com.xupt.book.Filter.RoleCheck;
 import com.xupt.book.Pojo.Song;
 import com.xupt.book.Service.SongService;
-import com.xupt.book.Utils.AliOssUtil;
-import com.xupt.book.Utils.ThreadLocalUtil;
+import com.xupt.book.Utils.MinioUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -87,7 +86,7 @@ public class SongController {
             return Result.error("上传失败，参数不完整");
         }
         String filename = UUID.randomUUID() + ".mp3";
-        String filePath = AliOssUtil.UploadFile(filename, file.getInputStream());
+        String filePath = MinioUtil.UploadFile(filename, file.getInputStream());
         song.setCreateTime(new Date());
         song.setUpdateTime(new Date());
         song.setPic("/img/songPic/tubiao.jpg");
@@ -124,7 +123,7 @@ public class SongController {
             @Parameter(description = "封面图片文件") @RequestPart MultipartFile file) throws Exception {
         if (file.isEmpty()) return Result.error("图片上传失败，文件为空");
         String filename = UUID.randomUUID() + ".jpg";
-        String filePath = AliOssUtil.UploadFile(filename, file.getInputStream());
+        String filePath = MinioUtil.UploadFile(filename, file.getInputStream());
         Song song = new Song();
         song.setId(id);
         song.setPic(filePath);
@@ -140,21 +139,11 @@ public class SongController {
             @Parameter(description = "音乐文件") @RequestPart MultipartFile file) throws Exception {
         if (file.isEmpty()) return Result.error("音乐上传失败，文件为空");
         String filename = UUID.randomUUID() + ".mp3";
-        String filePath = AliOssUtil.UploadFile(filename, file.getInputStream());
+        String filePath = MinioUtil.UploadFile(filename, file.getInputStream());
         Song song = new Song();
         song.setId(id);
         song.setUrl(filePath);
         boolean res = songService.updateSongUrl(song);
         return res ? Result.success(filePath) : Result.error("上传失败，数据库更新失败");
-    }
-
-    // 获取推荐列表
-    @Operation(summary = "获取推荐歌曲列表", description = "根据用户的喜好和行为推荐歌曲")
-    @GetMapping("/recommend")
-    public Result<?> recommend() {
-        Map<String, Object> claims = ThreadLocalUtil.get();
-        String userId = claims.get("userId").toString();
-        List<Song> recommendSongs = songService.recommendSongs(userId);
-        return Result.success(recommendSongs);
     }
 }

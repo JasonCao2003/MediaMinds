@@ -1,6 +1,6 @@
 # ============================================================
 # MediaMinds 全局忽略规则
-# 智能书影音管理与推荐系统 (Spring Cloud + Vue + Python)
+# 智能书影音管理与推荐系统 (Spring Cloud + Next.js + Python)
 # ============================================================
 
 # ---------------- Java / Maven ----------------
@@ -16,7 +16,7 @@ replay_pid*
 .mvn/timing.properties
 .mvn/wrapper/maven-wrapper.properties
 
-# ---------------- Node / Vue ----------------
+# ---------------- Node / Next.js ----------------
 node_modules/
 dist/
 dist-ssr/
@@ -114,6 +114,10 @@ temp/
 *.tmp
 *.bak
 *.orig
+
+# ---------------- 部署运行态 ----------------
+deploy/pids/
+deploy/logs/
 
 # ---------------- 本地运行数据 / 隐私数据（按需启用）----------------
 # face_db 存放个人人脸生物特征，如需公开仓库请取消下一行注释以移除版本管理

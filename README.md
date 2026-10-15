@@ -1,10 +1,11 @@
-# MediaMinds · 智能书影音管理与推荐系统
+# MediaMinds · 智能书影音管理系统
 
-> 基于 **Spring Cloud 微服务 + Vue 3 + Python AI** 的一站式书影音资源管理平台，集成讯飞星火大模型、Whisper 语音识别与 InsightFace 人脸识别，提供书籍、音乐、视频、文档的统一管理与个性化推荐。
+> 基于 **Spring Cloud 微服务 + Next.js + Python AI** 的一站式书影音资源管理平台，集成讯飞星火大模型、Whisper 语音识别与 InsightFace 人脸识别，提供书籍、音乐、视频、文档的统一管理。
 
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.4-6DB33F?logo=springboot&logoColor=white)
 ![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2024.0.1-6DB33F?logo=spring&logoColor=white)
-![Vue](https://img.shields.io/badge/Vue-3.3-4FC08D?logo=vuedotjs&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
+![Material%20UI](https://img.shields.io/badge/Material%20UI-6-007FFF?logo=mui&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.x-3776AB?logo=python&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-8.x-4479A1?logo=mysql&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-6.x-DC382D?logo=redis&logoColor=white)
@@ -34,10 +35,9 @@
 MediaMinds 采用 **微服务架构** 与 **前后端分离** 设计，围绕书籍、音乐、视频、文档四类媒体资源构建统一管理平台，并深度融合人工智能技术：
 
 - 使用 **Spring Cloud** 构建服务注册发现、配置中心、API 网关与业务微服务生态；
-- 使用 **Vue 3** 构建响应式前端界面，提供流畅直观的交互体验；
+- 使用 **Next.js + Material UI** 构建响应式前端界面，提供流畅直观的交互体验；
 - 集成 **讯飞星火大模型** 实现书籍内容理解、歌词情感分析等智能能力；
-- 应用 **InsightFace** 提供人脸识别登录，**Whisper** 实现歌词与字幕自动生成；
-- 设计 **协同过滤 + 基于内容的混合推荐算法**，实现个性化内容推荐。
+- 应用 **InsightFace** 提供人脸识别登录，**Whisper** 实现歌词与字幕自动生成。
 
 > 📄 本仓库同时包含配套本科毕业设计论文，正文见 [`PAPER.md`](./PAPER.md)。
 
@@ -48,12 +48,11 @@ MediaMinds 采用 **微服务架构** 与 **前后端分离** 设计，围绕书
 | 模块 | 功能 |
 | --- | --- |
 | 👤 **用户服务** | 账号密码 / 邮箱验证码 / 人脸识别三种登录方式；注册、信息维护、头像上传；基于角色的权限管理 |
-| 📚 **书籍服务** | 书籍与章节管理、封面上传（OSS）、Python 自动章节划分、在线阅读器（多主题、字体调节、断点续读）、章节内容分析 |
+| 📚 **书籍服务** | 书籍与章节管理、封面上传（MinIO）、Python 自动章节划分、在线阅读器（多主题、字体调节、断点续读）、章节内容分析 |
 | 🎵 **音乐服务** | 歌曲 / 歌手 / 歌单管理、歌词编辑、在线播放与歌词同步、Whisper 歌词自动生成、歌词情感分析 |
 | 🎬 **视频服务** | 影片 / 分类 / 标签管理、在线播放、播放进度记忆、评论、点赞与收藏 |
 | 📁 **文档服务** | 文档上传管理、树形文件夹、版本控制与回溯、多格式在线预览 |
 | 🤖 **智能分析** | 星火大模型封装：书籍摘要 / 人物关系 / 主题分析、歌词情感分析、文档摘要与关键词、通用对话 |
-| 🎯 **个性化推荐** | 协同过滤（皮尔逊相关系数）、基于内容的推荐、混合推荐、冷启动热门推荐 |
 
 ---
 
@@ -64,7 +63,7 @@ MediaMinds 采用 **微服务架构** 与 **前后端分离** 设计，围绕书
 ```mermaid
 flowchart TB
     subgraph FE["前端层"]
-        VUE["Vue 3 + Element Plus<br/>Vue Router · Pinia · Axios"]
+        NEXT["Next.js 15 + Material UI<br/>App Router · Zustand · Axios"]
     end
 
     subgraph GW["网关层"]
@@ -77,7 +76,7 @@ flowchart TB
         MUSIC["music-service"]
         VIDEO["video-service"]
         DOC["document-service"]
-        SPARK["spark-service"]
+        AGENT["agent-service<br/>(智能入库 Agent)"]
         NOTI["notification-service"]
         FLASK["flask-service"]
     end
@@ -96,11 +95,11 @@ flowchart TB
     subgraph DATA["数据层"]
         MYSQL[("MySQL")]
         REDIS[("Redis")]
-        OSS[("阿里云 OSS")]
+        MinIO[("MinIO")]
         KAFKA[("Kafka")]
     end
 
-    VUE --> GATEWAY
+    NEXT --> GATEWAY
     GATEWAY --> AUTH & BOOK & MUSIC & VIDEO & DOC & SPARK & NOTI
     SPARK --> FLASK
     FLASK --> PY
@@ -120,9 +119,9 @@ flowchart TB
 | 服务治理 | Eureka（注册发现）、Spring Cloud Gateway（网关）、Spring Cloud Config（配置中心） |
 | 服务通信 | OpenFeign、RESTful API、Kafka（异步消息） |
 | 安全认证 | Spring Security、JWT、自定义 `@RoleCheck` 注解、RBAC |
-| 前端 | Vue 3.3、Vue Router、Pinia、Axios、Element Plus、ECharts、Quill |
+| 前端 | Next.js 15（App Router）、TypeScript、Material UI v6（Material Design 3）、Zustand、Axios、ECharts |
 | 持久化 | MySQL 8.x、MyBatis-Plus、Redis 6.x |
-| 对象存储 | 阿里云 OSS |
+| 对象存储 | MinIO |
 | 实时通信 | WebSocket / STOMP |
 | 人工智能 | 讯飞星火大模型、OpenAI Whisper、InsightFace / ArcFace |
 | 运行环境 | JDK 17、Node.js 18+、Python 3.x |
@@ -148,16 +147,16 @@ MediaMinds/
 │   ├── music-service/       # 音乐服务
 │   ├── video-service/       # 视频服务
 │   ├── document-service/    # 文档服务
-│   ├── spark-service/       # 星火大模型服务
+│   ├── agent-service/       # 智能入库 Agent（聚合酷狗/TMDB/豆瓣）
 │   ├── notification-service/# 通知服务
 │   └── flask-service/       # Python AI 服务桥接
-├── MediaMinds_vue/          # Vue 3 前端
+├── MediaMinds_next/         # Next.js 15 + Material UI 前端
+│   ├── src/app/             # App Router 页面 (login / (user)/content / (admin)/admin)
 │   ├── src/api/             # 接口封装
-│   ├── src/views/           # 页面 (user / admin)
-│   ├── src/components/      # 通用组件
-│   ├── src/stores/          # Pinia 状态管理
-│   ├── src/router/          # 路由
-│   └── vue.config.js        # 开发代理配置
+│   ├── src/components/      # 布局与通用组件
+│   ├── src/lib/             # 请求 / WebSocket / 主题 / 通知
+│   ├── src/stores/          # Zustand 状态管理
+│   └── next.config.mjs      # /api · /oss · /ws 开发代理
 └── MediaMinds_py/           # Python AI 实验与脚本
     ├── FaceIdentity.ipynb       # 人脸识别
     ├── lyric_recognizer.ipynb   # 歌词识别 (Whisper)
@@ -197,17 +196,19 @@ mvn -pl config-service    spring-boot:run   # 8888
 ```bash
 # 在 MediaMinds_java 目录下
 mvn clean install
-# 依次启动 gateway / auth / book / music / video / document / spark 等模块
+# 依次启动 gateway / auth / book / music / video / agent / document 等模块
 mvn -pl gateway-service spring-boot:run      # 8080
 ```
 
 ### 3. 启动前端
 
 ```bash
-cd MediaMinds_vue
+cd MediaMinds_next
 npm install
-npm run serve     # http://localhost:5173
+npm run dev       # http://localhost:5173
 ```
+
+> 前端为 Next.js 15 + Material UI，详见 [`MediaMinds_next/README.md`](./MediaMinds_next/README.md)。
 
 ### 4. Python AI 服务
 
@@ -225,7 +226,7 @@ npm run serve     # http://localhost:5173
 - **数据源**：MySQL 地址、库名、账号密码
 - **缓存**：Redis 连接信息
 - **消息队列**：Kafka 地址（如启用）
-- **对象存储**：阿里云 OSS 的 `endpoint` / `accessKey` / `bucket`
+- **对象存储**：MinIO 的 `endpoint` / `accessKey` / `secretKey` / `bucket`（也可通过环境变量 `MINIO_ENDPOINT` / `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` / `MINIO_BUCKET` 配置）
 - **AI 服务**：讯飞星火 `appId` / `apiKey` / `apiSecret`，Python 服务地址
 
 > ⚠️ **安全提示**：请勿将真实密钥提交到仓库。建议使用环境变量或本地配置文件（已在 `.gitignore` 中忽略 `.env` 等敏感文件）。
@@ -240,9 +241,9 @@ npm run serve     # http://localhost:5173
 | :---: | :---: |
 | ![人脸登录](./assets/image-20260327132910932.png) | ![书籍阅读器](./assets/image-20260327133027925.png) |
 
-| 音乐播放器 | 视频推荐 |
+| 音乐播放器 | 视频播放 |
 | :---: | :---: |
-| ![音乐播放器](./assets/image-20260327133200885.png) | ![视频推荐](./assets/image-20260327133259326.png) |
+| ![音乐播放器](./assets/image-20260327133200885.png) | ![视频播放](./assets/image-20260327133259326.png) |
 
 | 文档管理 | 书籍内容分析 |
 | :---: | :---: |

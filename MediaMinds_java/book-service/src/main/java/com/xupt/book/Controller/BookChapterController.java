@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xupt.book.DTO.Result;
 import com.xupt.book.Pojo.BookChapter;
 import com.xupt.book.Service.BookChapterService;
-import com.xupt.book.Utils.AliOssUtil;
+import com.xupt.book.Utils.MinioUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -85,7 +85,7 @@ public class BookChapterController {
     public Result<String> testGetContent(
             @Parameter(description = "文件路径", required = true) @RequestParam String path) {
         try {
-            String content = com.xupt.book.Utils.AliOssUtil.downloadFile(path);
+            String content = com.xupt.book.Utils.MinioUtil.downloadFile(path);
             return Result.success(content);
         } catch (Exception e) {
             e.printStackTrace();

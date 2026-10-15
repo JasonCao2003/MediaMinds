@@ -4,7 +4,7 @@ import com.xupt.book.DTO.Result;
 import com.xupt.book.Filter.RoleCheck;
 import com.xupt.book.Pojo.Singer;
 import com.xupt.book.Service.SingerService;
-import com.xupt.book.Utils.AliOssUtil;
+import com.xupt.book.Utils.MinioUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -94,7 +94,7 @@ public class SingerController {
             return Result.error("文件上传失败！");
         }
         String filename = UUID.randomUUID() + ".jpg";
-        String filePath = AliOssUtil.UploadFile(filename, avatarFile.getInputStream());
+        String filePath = MinioUtil.UploadFile(filename, avatarFile.getInputStream());
 
         Singer singer = new Singer();
         singer.setId(id);

@@ -16,7 +16,6 @@ import java.util.Map;
  * - 新内容上架（NEW_CONTENT）
  * - 评论回复（COMMENT_REPLY）
  * - 收藏成功（COLLECT_SUCCESS）
- * - 内容推荐（RECOMMENDATION）
  * - 系统公告（SYSTEM_NOTICE）
  */
 @Service
@@ -65,7 +64,6 @@ public class KafkaConsumer {
                 case "NEW_CONTENT" -> handleNewContentNotification(event);
                 case "COMMENT_REPLY" -> handleCommentReplyNotification(event);
                 case "COLLECT_SUCCESS" -> handleCollectSuccessNotification(event);
-                case "RECOMMENDATION" -> handleRecommendationNotification(event);
                 case "SYSTEM_NOTICE" -> handleSystemNotice(event);
                 default -> System.err.println("未知通知类型: " + type);
             }
@@ -113,20 +111,6 @@ public class KafkaConsumer {
 //        notificationService.saveNotification(userId, "COLLECT_SUCCESS", content);
         webSocketService.sendPrivateMessage(userId, content);
         System.out.println("处理收藏成功通知: " + content);
-    }
-
-    /**
-     * 处理推荐内容通知
-     */
-    private void handleRecommendationNotification(Map<String, Object> event) {
-        String userId = (String) event.get("userId");
-        String title = (String) event.get("title");
-        String reason = (String) event.get("reason");
-
-        String content = String.format("为你推荐：《%s》，推荐理由：%s", title, reason);
-//        notificationService.saveNotification(userId, "RECOMMENDATION", content);
-        webSocketService.sendPrivateMessage(userId, content);
-        System.out.println("处理推荐内容通知: " + content);
     }
 
     /**

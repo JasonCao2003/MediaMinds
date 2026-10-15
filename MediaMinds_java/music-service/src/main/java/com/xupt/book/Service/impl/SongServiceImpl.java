@@ -7,20 +7,15 @@ import com.xupt.book.Mapper.SingerMapper;
 import com.xupt.book.Mapper.SongMapper;
 import com.xupt.book.Pojo.Singer;
 import com.xupt.book.Pojo.Song;
-import com.xupt.book.Service.RecommendService;
 import com.xupt.book.Service.SongService;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 @Service
 public class SongServiceImpl implements SongService {
 
     @Resource
     private SongMapper songMapper;
-    @Resource
-    private RecommendService recommendSongListService;
     @Resource
     private SingerMapper singerMapper;
 
@@ -78,11 +73,6 @@ public class SongServiceImpl implements SongService {
         QueryWrapper<Song> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("singer_id",singer.getId());
         return songMapper.selectPage(page, queryWrapper);
-    }
-
-    @Override
-    public List<Song> recommendSongs(String userId) {
-        return recommendSongListService.recommendSongs(userId);
     }
 
     @Override

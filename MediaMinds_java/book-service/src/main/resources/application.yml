@@ -1,5 +1,61 @@
+server:
+  port: 9006
 spring:
   application:
     name: book-service
-  config:
-    import: configserver:http://localhost:8888
+  # MySQL
+  datasource:
+    url: jdbc:mysql://localhost:3306/book_db?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=UTF-8&useSSL=false
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  # Kafka
+  kafka:
+    bootstrap-servers: localhost:9092
+  # Bus
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
+    bus:
+      enabled: true
+      refresh:
+        enabled: true
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+# Eureka
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+# mybatis-plus
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+knife4j:
+  enable: true
+  setting:
+    language: zh-CN
+
+# Project Gutenberg 书源配置（Gutendex 公开 API，无需鉴权）
+gutenberg:
+  base-url: https://gutendex.com
+  # 语言过滤（en/zh/...），留空表示不限
+  languages: ""
+  # 导入书籍默认归属的类型（不存在会自动创建）
+  default-type-name: Project Gutenberg
+  # 导入时是否把封面下载到 MinIO
+  import-download-cover: true
+  # 导入时是否把正文下载并按章节切分存入 MinIO
+  import-download-text: true

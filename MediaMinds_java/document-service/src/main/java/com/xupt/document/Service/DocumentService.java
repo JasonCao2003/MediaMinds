@@ -7,7 +7,7 @@ import com.xupt.document.Mapper.DocumentMapper;
 import com.xupt.document.Mapper.DocumentVersionMapper;
 import com.xupt.document.Pojo.Document;
 import com.xupt.document.Pojo.DocumentVersion;
-import com.xupt.document.Utils.AliOssUtil;
+import com.xupt.document.Utils.MinioUtil;
 import com.xupt.document.Utils.ThreadLocalUtil;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
@@ -138,7 +138,7 @@ public class DocumentService {
             String objectName = "documents/" + documentId + "." + fileType;
             
             // 上传文件到阿里云OSS
-            String ossUrl = AliOssUtil.uploadFile(objectName, file.getInputStream());
+            String ossUrl = MinioUtil.uploadFile(objectName, file.getInputStream());
             
             // 创建文档记录
             Document document = new Document();
@@ -254,7 +254,7 @@ public class DocumentService {
             String objectName = "documents/" + id + "_v" + newVersion + "." + fileType;
             
             // 上传文件到阿里云OSS
-            String ossUrl = AliOssUtil.uploadFile(objectName, file.getInputStream());
+            String ossUrl = MinioUtil.uploadFile(objectName, file.getInputStream());
             
             // 更新文档记录
             Document document = new Document();

@@ -1,0 +1,29 @@
+server:
+  port: 9011
+spring:
+  application:
+    name: agent-service
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+# Eureka
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+# 数据源服务（经 Eureka 负载均衡，Feign 使用服务名）
+agent:
+  # 单次查询每个数据源返回的候选数量
+  page-size: 10
+  # 音乐默认搜索页大小（酷狗）
+  music-size: 20

@@ -32,18 +32,7 @@ public class Interceptor implements HandlerInterceptor {
             ThreadLocalUtil.set(claims);
         }
 
-        // 权限校验
-        if (handler instanceof HandlerMethod method) {
-            RoleCheck roleCheck = method.getMethodAnnotation(RoleCheck.class);
-            if (roleCheck != null) {
-                String requiredRole = roleCheck.value();
-                if (!requiredRole.equalsIgnoreCase(role)) {
-                    response.setStatus(403);
-                    response.getWriter().write("禁止访问，您的权限为：" + requiredRole);
-                    return false;
-                }
-            }
-        }
+        // 单用户模式：不再进行角色校验（原 @RoleCheck 保留为文档标记）
         return true;
     }
 

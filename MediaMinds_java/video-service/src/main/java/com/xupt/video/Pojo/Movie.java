@@ -28,4 +28,6 @@ public class Movie {
     private String type;
     private String video;
     private Integer rateCount;
+    /** 数据来源标记，如 TMDB */
+    private String source;
 } 

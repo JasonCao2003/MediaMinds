@@ -5,7 +5,7 @@ import com.xupt.video.DTO.Result;
 import com.xupt.video.Filter.RoleCheck;
 import com.xupt.video.Pojo.Movie;
 import com.xupt.video.Service.MovieService;
-import com.xupt.video.Utils.AliOssUtil;
+import com.xupt.video.Utils.MinioUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -106,7 +106,7 @@ public class MovieController {
             @Parameter(description = "封面图片", required = true) @RequestParam("image") MultipartFile file) throws Exception {
         // 上传至阿里云
         String filename = "movie/cover/" + UUID.randomUUID() + ".jpg";
-        String filePath = AliOssUtil.UploadFile(filename, file.getInputStream());
+        String filePath = MinioUtil.UploadFile(filename, file.getInputStream());
         return movieService.updateCover(movieId, filePath);
     }
 
@@ -119,7 +119,7 @@ public class MovieController {
             @Parameter(description = "视频文件", required = true) @RequestParam("video") MultipartFile file) throws Exception {
         // 上传至阿里云
         String filename = "movie/video/" + UUID.randomUUID() + ".mp4";
-        String filePath = AliOssUtil.UploadFile(filename, file.getInputStream());
+        String filePath = MinioUtil.UploadFile(filename, file.getInputStream());
         return movieService.updateVideo(movieId, filePath);
     }
 

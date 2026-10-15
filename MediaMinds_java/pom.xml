@@ -43,7 +43,7 @@
         <module>book-service</module>
         <module>flask-service</module>
         <module>video-service</module>
-        <module>spark-service</module>
+        <module>agent-service</module>
         <module>document-service</module>
     </modules>
 

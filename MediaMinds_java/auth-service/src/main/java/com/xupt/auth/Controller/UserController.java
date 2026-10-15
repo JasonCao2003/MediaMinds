@@ -8,7 +8,7 @@ import com.xupt.auth.DTO.UserDTO;
 import com.xupt.auth.Pojo.User;
 import com.xupt.auth.Filter.RoleCheck;
 import com.xupt.auth.Service.UserService;
-import com.xupt.auth.Utils.AliOssUtil;
+import com.xupt.auth.Utils.MinioUtil;
 import com.xupt.auth.Utils.Md5Util;
 import com.xupt.auth.Utils.ThreadLocalUtil;
 import jakarta.annotation.Resource;
@@ -63,7 +63,7 @@ public class UserController {
         User user = userService.getUserByUserId(userId);
         // 上传至阿里云
         String filename = "user/"+UUID.randomUUID() + ".jpg";
-        String filePath = AliOssUtil.UploadFile(filename, file.getInputStream());
+        String filePath = MinioUtil.UploadFile(filename, file.getInputStream());
         userService.updateAvatar(filePath, user.getUserId());
         return Result.success();
     }

@@ -2,10 +2,8 @@ package com.xupt.book.Controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xupt.book.DTO.Result;
-import com.xupt.book.Pojo.Book;
 import com.xupt.book.Pojo.BookType;
 import com.xupt.book.Service.BookTypeService;
-import com.xupt.book.Utils.ThreadLocalUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,11 +11,10 @@ import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/v1/book/type")
-@Tag(name = "书籍类型管理接口", description = "管理书籍类型的增删改查及推荐功能")
+@Tag(name = "书籍类型管理接口", description = "管理书籍类型的增删改查")
 public class BookTypeController {
 
     @Resource
@@ -69,14 +66,5 @@ public class BookTypeController {
     public Result<?> deleteType(
             @Parameter(description = "书籍类型 ID", required = true, example = "1") @PathVariable Integer id) {
         return bookTypeService.deleteType(id);
-    }
-
-    // 推荐书籍 - 基于物品的协同过滤算法
-    @Operation(summary = "推荐书籍", description = "基于物品的协同过滤算法为用户推荐书籍")
-    @GetMapping("/recommend")
-    public Result<List<Book>> recommendBooks() {
-        Map<String, Object> claims = ThreadLocalUtil.get();
-        String userId = claims.get("userId").toString();
-        return bookTypeService.recommendBooks(userId);
     }
 }
