@@ -27,3 +27,20 @@ agent:
   page-size: 10
   # 音乐默认搜索页大小（酷狗）
   music-size: 20
+  # LangChain4j 智能体（OpenAI 兼容协议，默认 DeepSeek）
+  llm:
+    # 关闭或未配置 api-key 时，Agent 自动降级为规则式解析
+    enabled: ${AGENT_LLM_ENABLED:true}
+    base-url: ${AGENT_LLM_BASE_URL:https://api.deepseek.com/v1}
+    api-key: ${DEEPSEEK_API_KEY:}
+    model-name: ${AGENT_LLM_MODEL:deepseek-chat}
+    temperature: 0.3
+    # 大模型调用较慢，超时给宽松一些
+    timeout-seconds: 90
+    max-retries: 1
+    # 多轮对话保留的历史消息条数
+    memory-window: 20
+    # 单次提问内允许的最大连续工具调用次数
+    max-tool-invocations: 8
+    log-requests: false
+    log-responses: false

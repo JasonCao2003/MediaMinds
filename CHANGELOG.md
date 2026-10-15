@@ -20,8 +20,14 @@
   - 与后端网关一致的 `/api`、`/oss`、`/ws` 开发代理。
 - **本地部署编排（`deploy/`）**：`docker-compose.yml`（MySQL/Redis/MinIO/Zookeeper/Kafka）、`mysql-init/*.sql`、一键启停脚本 `start-all.sh` / `stop-all.sh` 与部署说明。
 - **外部数据源接入**：复用后端已有集成，从 **酷狗音乐**（`/v1/music/kugou/import`）与 **Project Gutenberg**（`/v1/book/gutenberg/import`，经 Gutendex）批量拉取真实数据入库，`song`/`book`/`movie` 记录标注 `source` 来源。
-- **智能入库 Agent（`agent-service`，端口 9011）**：新增自然语言入库服务。用户描述「我想要某个视频/图书/音乐」后，Agent 解析意图（类型 / 检索维度 / 关键词）→ 通过 OpenFeign 聚合调用酷狗、TMDB、Gutenberg 三个数据源 → 归一化为统一候选结构返回 → 用户勾选后批量入库元数据（媒体本体不入库，可自行上传）。支持按标题 / 歌手 / 作者 / 演员 / 导演检索。
-- 前端新增「智能入库」页面（`/content/agent`）：对话式交互 + 候选卡片多选 + 批量入库。
+- **智能入库 Agent（`agent-service`，端口 9011）**：新增自然语言入库服务。用户描述「我想要某个视频/图书/音乐」后，Agent 解析意图（类型 / 检索维度 / 关键词）→ 通过 OpenFeign 聚合调用酷狗、TMDB、豆瓣三个数据源 → 归一化为统一候选结构返回 → 用户勾选后批量入库元数据（媒体本体不入库，可自行上传）。支持按标题 / 歌手 / 作者 / 演员 / 导演检索。
+- **Agent 升级为 LangChain4j 工具调用智能体**：接入 [LangChain4j](https://github.com/langchain4j/langchain4j) `1.22.0` + **DeepSeek**（OpenAI 兼容协议），由大模型自主决定调用哪个数据源、如何回答，替代原先的固定编排。
+  - 5 个 `@Tool`：`searchMusic` / `searchMovies` / `searchMoviesByPerson` / `searchBooks` / `importCandidates`（按候选序号批量入库）。
+  - **多轮对话**：`MessageWindowChatMemory` 按 `sessionId` 维护上下文，支持「前三个都入库」这类追问；候选按会话快照保存，跨轮次仍可按序号引用（`@ToolMemoryId`）。
+  - 新增接口 `POST /v1/agent/chat`（多轮对话）、`POST /v1/agent/session/clear`（清空会话）、`GET /v1/agent/status`（引擎/模型状态）。
+  - **优雅降级**：未配置 API Key 或大模型调用失败时，自动回退为规则式解析（`IntentParser` 保留为兜底链路），服务始终可用。
+  - 模型经 `agent.llm.*` 配置，默认 `https://api.deepseek.com/v1` + `deepseek-chat`；Key 由环境变量 `DEEPSEEK_API_KEY` 注入（写入已 gitignore 的 `deploy/.env.local`）。
+- 前端新增「智能入库」页面（`/content/agent`）：对话式交互 + 候选卡片多选 + 批量入库；展示智能体回复、引擎徽章（LangChain4j / 规则）、工具调用徽章与 token 用量，支持「新会话」。
 - 影视数据源扩展：`/v1/video/tmdb/person/search` 与 `/v1/video/tmdb/person/movies`，支持按演员 / 导演检索影片。
 - **豆瓣书源（`book-service`）**：新增 `/v1/book/douban/search`、`/v1/book/douban/{id}`、`/v1/book/douban/import`，抓取豆瓣图书搜索结果与 rexxar 详情接口，仅入库元信息（书名/作者/封面/简介/出版信息），不下载正文。Agent 的图书来源已切换为豆瓣。
 

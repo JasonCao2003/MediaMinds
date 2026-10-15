@@ -51,9 +51,19 @@ docker exec -i mm-mysql mysql -uroot -p123456 < deploy/mysql-init/01_user_db.sql
 export TMDB_ACCESS_TOKEN="<TMDB v4 Read Access Token>"
 export TMDB_API_KEY="<TMDB v3 API Key>"        # 与上一项二选一
 export KUGOU_TOKEN=""                           # 可选：酷狗登录态，用于解析 VIP 曲目直链
+export DEEPSEEK_API_KEY="sk-xxxxxx"             # 智能入库 Agent 的大模型 Key（LangChain4j）
 ```
 
 配置后 `video-service` 即可使用 `/v1/video/tmdb/*` 搜索与导入影视。
+
+`agent-service` 的大模型配置（可用环境变量覆盖）：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `DEEPSEEK_API_KEY` | 空 | 未配置时 Agent 自动降级为规则式解析 |
+| `AGENT_LLM_ENABLED` | `true` | 是否启用大模型 |
+| `AGENT_LLM_BASE_URL` | `https://api.deepseek.com/v1` | OpenAI 兼容端点（可换成通义千问 / Moonshot / Ollama） |
+| `AGENT_LLM_MODEL` | `deepseek-chat` | 模型名 |
 
 ## 外部数据源入库
 
@@ -65,7 +75,7 @@ export KUGOU_TOKEN=""                           # 可选：酷狗登录态，用
 | 豆瓣图书 | `POST /v1/book/douban/import?id=` | 写入 `book`（仅元信息：书名/作者/封面/简介/出版信息） |
 | Project Gutenberg | `POST /v1/book/gutenberg/import?id=` | 旧书源（保留），写入 `book`/`book_chapter` |
 | TMDB | `POST /v1/video/tmdb/import/batch` | 写入 `movie`，自动建分类/标签并关联，海报入 MinIO |
-| 智能 Agent | `POST /v1/agent/query` / `POST /v1/agent/import` | 自然语言聚合检索（酷狗 / TMDB / 豆瓣），结构化候选后批量入库元数据 |
+| 智能 Agent | `POST /v1/agent/chat`（多轮）/ `POST /v1/agent/query` / `POST /v1/agent/import` | 基于 **LangChain4j + DeepSeek** 的工具调用智能体：大模型自主检索（酷狗 / TMDB / 豆瓣）、生成自然语言回复，并可按序号批量入库元数据 |
 
 ## 说明
 

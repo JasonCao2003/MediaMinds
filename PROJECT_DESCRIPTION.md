@@ -25,12 +25,13 @@ MediaMinds（智能书影音管理系统）是一个面向海量媒体内容的�
 | 微服务框架 | Spring Boot 3.4.4、Spring Cloud 2024.0.1 |
 | 服务治理 | Eureka（注册发现）、Spring Cloud Gateway（网关）、Spring Cloud Config（配置中心） |
 | 服务通信 | OpenFeign、RESTful API、Kafka（异步消息） |
-| 安全认证 | Spring Security、JWT、自定义 `@RoleCheck` 注解、RBAC |
+| 安全认证 | Spring Security、JWT（单用户模式，已移除角色校验） |
 | 前端 | Next.js 15（App Router）、TypeScript、Material UI v6（Material Design 3）、Zustand、Axios、ECharts |
 | 持久化 | MySQL 8.x、Redis 6.x（缓存）、MyBatis-Plus |
 | 对象存储 | MinIO |
 | 实时通信 | WebSocket / STOMP |
-| 人工智能（Python） | 讯飞星火大模型、OpenAI Whisper（语音识别）、InsightFace / ArcFace（人脸识别） |
+| 智能体（Java） | LangChain4j 1.22（工具调用 / 多轮记忆）、DeepSeek（OpenAI 兼容协议） |
+| 人工智能（Python） | OpenAI Whisper（语音识别）、InsightFace / ArcFace（人脸识别） |
 | 运行环境 | JDK 17、Node.js 18+、Python 3.x |
 
 ---
@@ -63,7 +64,7 @@ Java 微服务模块（`MediaMinds_java/`）：
 | `video-service` | 视频管理 | 由配置中心分配 |
 | `document-service` | 文档管理 | 9009 |
 | `notification-service` | 异步通知 | 由配置中心分配 |
-| `agent-service` | 智能入库 Agent（自然语言 → 聚合检索 → 批量入库元数据） | 9011 |
+| `agent-service` | 智能入库 Agent（LangChain4j + DeepSeek，自然语言 → 工具调用聚合检索 → 批量入库元数据） | 9011 |
 | `flask-service` | Java 与 Python AI 服务桥接 | 9010 |
 | `demo-service` | 示例服务 | 9002 |
 

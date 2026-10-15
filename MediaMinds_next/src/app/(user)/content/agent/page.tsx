@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Avatar,
   Box,
@@ -17,14 +17,19 @@ import {
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import SendRoundedIcon from '@mui/icons-material/SendRounded';
 import CloudDownloadRoundedIcon from '@mui/icons-material/CloudDownloadRounded';
+import AutorenewRoundedIcon from '@mui/icons-material/AutorenewRounded';
+import BuildRoundedIcon from '@mui/icons-material/BuildRounded';
 import PageHeader from '@/components/common/PageHeader';
 import EmptyState from '@/components/common/EmptyState';
 import { toast } from '@/lib/notify';
 import {
-  agentQueryService,
+  agentChatService,
+  agentClearSessionService,
+  agentStatusService,
   agentImportService,
   type AgentCandidate,
   type AgentQueryResult,
+  type AgentStatus,
 } from '@/api/agent';
 
 interface AgentMessage {
@@ -62,6 +67,15 @@ const TYPE_LABEL: Record<string, string> = {
   book: '图书',
 };
 
+/** 工具名 → 中文说明，用于展示智能体本轮调用了哪些能力 */
+const TOOL_LABEL: Record<string, string> = {
+  searchMusic: '检索音乐',
+  searchMovies: '检索影片',
+  searchMoviesByPerson: '按人物检索影片',
+  searchBooks: '检索图书',
+  importCandidates: '批量入库',
+};
+
 const keyOf = (c: AgentCandidate) => `${c.source}:${c.sourceId}`;
 
 export default function AgentPage() {
@@ -72,12 +86,20 @@ export default function AgentPage() {
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [selected, setSelected] = useState<Record<string, AgentCandidate>>({});
+  const [sessionId, setSessionId] = useState<string | undefined>();
+  const [status, setStatus] = useState<AgentStatus | null>(null);
   const seq = useRef(0);
 
   const nextId = () => {
     seq.current += 1;
     return `m-${Date.now()}-${seq.current}`;
   };
+
+  useEffect(() => {
+    agentStatusService()
+      .then((res) => setStatus(res.data ?? null))
+      .catch(() => setStatus(null));
+  }, []);
 
   const selectedList = useMemo(() => Object.values(selected), [selected]);
 
@@ -91,8 +113,10 @@ export default function AgentPage() {
     setInput('');
     setLoading(true);
     try {
-      const res = await agentQueryService({ message: text, type, by });
-      setMessages((prev) => [...prev, { id: nextId(), role: 'agent', result: res.data }]);
+      const res = await agentChatService({ sessionId, message: text, type, by });
+      const data = res.data;
+      if (data?.sessionId) setSessionId(data.sessionId);
+      setMessages((prev) => [...prev, { id: nextId(), role: 'agent', result: data }]);
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -101,7 +125,22 @@ export default function AgentPage() {
     } finally {
       setLoading(false);
     }
-  }, [input, type, by]);
+  }, [input, type, by, sessionId]);
+
+  const newSession = useCallback(async () => {
+    const sid = sessionId;
+    setMessages([]);
+    setSelected({});
+    setSessionId(undefined);
+    if (sid) {
+      try {
+        await agentClearSessionService(sid);
+      } catch {
+        /* 会话清理失败不影响使用 */
+      }
+    }
+    toast.success('已开启新会话');
+  }, [sessionId]);
 
   const toggleSelect = (c: AgentCandidate) => {
     setSelected((prev) => {
@@ -125,7 +164,7 @@ export default function AgentPage() {
       const ok = data?.importedCount ?? 0;
       const fail = data?.failedCount ?? 0;
       if (ok > 0) toast.success(`已入库 ${ok} 条元数据${fail > 0 ? `，${fail} 条失败` : ''}`);
-      else toast.error(`入库失败${fail > 0 ? `（${fail} 条）` : ''}，请确认当前账号具备管理员权限`);
+      else toast.error(`入库失败${fail > 0 ? `（${fail} 条）` : ''}，请稍后重试`);
       setMessages((prev) => [
         ...prev,
         {
@@ -180,6 +219,17 @@ export default function AgentPage() {
     );
   };
 
+  const engineChip = status?.llmEnabled ? (
+    <Chip
+      size="small"
+      color="primary"
+      label={`Agent 引擎：LangChain4j · ${status.model}`}
+      sx={{ fontWeight: 600 }}
+    />
+  ) : (
+    <Chip size="small" label="Agent 引擎：规则解析（未配置大模型）" />
+  );
+
   return (
     <Box>
       <PageHeader
@@ -189,7 +239,7 @@ export default function AgentPage() {
       />
 
       <Card sx={{ p: 2.5, mb: 2 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
           <TextField
             select
             size="small"
@@ -219,6 +269,7 @@ export default function AgentPage() {
             ))}
           </TextField>
           <Box sx={{ flex: 1 }} />
+          {engineChip}
           <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
             数据源：酷狗音乐 · TMDB · 豆瓣图书
           </Typography>
@@ -238,7 +289,7 @@ export default function AgentPage() {
           <EmptyState
             icon={<AutoAwesomeRoundedIcon sx={{ fontSize: 64 }} />}
             title="告诉我你想要什么"
-            description="例如：我想要周杰伦的歌 / 帮我找电影 星际穿越 / 有没有刘慈欣写的书 / 汤姆·汉克斯主演的影片"
+            description="例如：我想要周杰伦的歌 / 帮我找电影 星际穿越 / 有没有刘慈欣写的书 / 汤姆·汉克斯主演的影片。也可以连续追问，比如「前三个都入库」。"
           />
         ) : (
           <Stack spacing={2.5}>
@@ -282,8 +333,50 @@ export default function AgentPage() {
                 );
               }
               const result = m.result;
+              const groups = (result?.groups ?? []).filter((g) => g.candidates.length > 0 || g.error || g.hint);
               return (
                 <Box key={m.id}>
+                  {result?.reply && (
+                    <Box
+                      sx={{
+                        maxWidth: '78%',
+                        px: 2,
+                        py: 1.25,
+                        mb: 1.5,
+                        borderRadius: '18px 18px 18px 4px',
+                        bgcolor: 'action.hover',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
+                      {result.reply}
+                    </Box>
+                  )}
+
+                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ mb: 1.5 }}>
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      color={result?.engine === 'langchain4j' ? 'primary' : 'default'}
+                      label={result?.engine === 'langchain4j' ? 'LangChain4j' : '规则解析'}
+                    />
+                    {result?.tools?.map((t, i) => (
+                      <Chip
+                        key={`${t}-${i}`}
+                        size="small"
+                        variant="outlined"
+                        icon={<BuildRoundedIcon />}
+                        label={TOOL_LABEL[t] ?? t}
+                      />
+                    ))}
+                    {result?.usage?.totalTokens ? (
+                      <Typography variant="caption" color="text.secondary">
+                        {result.usage.totalTokens} tokens
+                      </Typography>
+                    ) : null}
+                  </Stack>
+
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                     识别结果：类型「{TYPE_LABEL[result?.intent.type ?? 'auto'] ?? '全部'}」· 维度「
                     {BY_OPTIONS.find((o) => o.value === result?.intent.by)?.label ?? result?.intent.by}」· 关键词「
@@ -294,9 +387,14 @@ export default function AgentPage() {
                       {result.hint}
                     </Typography>
                   )}
+                  {result?.error && (
+                    <Typography variant="body2" color="warning.main" sx={{ mb: 1.5 }}>
+                      {result.error}
+                    </Typography>
+                  )}
                   <Stack spacing={2}>
-                    {result?.groups.map((g) => (
-                      <Box key={`${g.type}-${g.source}`}>
+                    {groups.map((g) => (
+                      <Box key={`${g.type}-${g.label}`}>
                         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                           <Typography variant="subtitle2" fontWeight={700}>
                             {g.label}
@@ -344,7 +442,7 @@ export default function AgentPage() {
               <Stack direction="row" spacing={1.5} alignItems="center">
                 <CircularProgress size={18} />
                 <Typography variant="body2" color="text.secondary">
-                  Agent 正在检索数据源…
+                  Agent 正在思考并检索数据源…
                 </Typography>
               </Stack>
             )}
@@ -386,6 +484,15 @@ export default function AgentPage() {
             sx={{ minWidth: 150, height: 40 }}
           >
             批量入库{selectedList.length > 0 ? `（${selectedList.length}）` : ''}
+          </Button>
+          <Button
+            variant="text"
+            startIcon={<AutorenewRoundedIcon />}
+            onClick={newSession}
+            disabled={messages.length === 0 && !sessionId}
+            sx={{ minWidth: 110, height: 40 }}
+          >
+            新会话
           </Button>
         </Stack>
       </Card>

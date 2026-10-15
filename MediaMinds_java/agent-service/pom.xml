@@ -14,7 +14,7 @@
     <version>0.0.1-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>agent-service</name>
-    <description>智能入库 Agent：聚合酷狗 / TMDB / Gutenberg 数据源，理解用户意图并批量入库元数据</description>
+    <description>智能入库 Agent：基于 LangChain4j + DeepSeek 的工具调用智能体，聚合酷狗 / TMDB / 豆瓣数据源，理解用户意图并批量入库元数据</description>
 
     <dependencies>
         <dependency>
@@ -40,6 +40,16 @@
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-config</artifactId>
+        </dependency>
+        <!-- LangChain4j：Agent 编排（工具调用 / 多轮对话 / 记忆） -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j</artifactId>
+        </dependency>
+        <!-- OpenAI 兼容协议：DeepSeek / 通义千问 / Moonshot / Ollama 等均可接入 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai</artifactId>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>

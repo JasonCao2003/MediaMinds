@@ -118,12 +118,13 @@ flowchart TB
 | 微服务框架 | Spring Boot 3.4.4、Spring Cloud 2024.0.1 |
 | 服务治理 | Eureka（注册发现）、Spring Cloud Gateway（网关）、Spring Cloud Config（配置中心） |
 | 服务通信 | OpenFeign、RESTful API、Kafka（异步消息） |
-| 安全认证 | Spring Security、JWT、自定义 `@RoleCheck` 注解、RBAC |
+| 安全认证 | Spring Security、JWT（单用户模式，已移除角色校验） |
 | 前端 | Next.js 15（App Router）、TypeScript、Material UI v6（Material Design 3）、Zustand、Axios、ECharts |
 | 持久化 | MySQL 8.x、MyBatis-Plus、Redis 6.x |
 | 对象存储 | MinIO |
 | 实时通信 | WebSocket / STOMP |
-| 人工智能 | 讯飞星火大模型、OpenAI Whisper、InsightFace / ArcFace |
+| 智能体 | LangChain4j 1.22（工具调用 / 多轮记忆）、DeepSeek（OpenAI 兼容协议） |
+| 人工智能 | OpenAI Whisper、InsightFace / ArcFace |
 | 运行环境 | JDK 17、Node.js 18+、Python 3.x |
 
 ---
@@ -147,7 +148,7 @@ MediaMinds/
 │   ├── music-service/       # 音乐服务
 │   ├── video-service/       # 视频服务
 │   ├── document-service/    # 文档服务
-│   ├── agent-service/       # 智能入库 Agent（聚合酷狗/TMDB/豆瓣）
+│   ├── agent-service/       # 智能入库 Agent（LangChain4j + DeepSeek，聚合酷狗/TMDB/豆瓣）
 │   ├── notification-service/# 通知服务
 │   └── flask-service/       # Python AI 服务桥接
 ├── MediaMinds_next/         # Next.js 15 + Material UI 前端

@@ -5,17 +5,17 @@ import lombok.Data;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** 结构化候选条目（统一酷狗 / TMDB / Gutenberg 三种来源） */
+/** 结构化候选条目（统一酷狗 / TMDB / 豆瓣 三种来源） */
 @Data
 public class Candidate {
 
-    /** 数据来源：kugou | tmdb | gutenberg */
+    /** 数据来源：kugou | tmdb | douban */
     private String source;
 
     /** 媒体类型：music | video | book */
     private String type;
 
-    /** 来源内唯一 ID（酷狗 hash / TMDB id / Gutenberg id） */
+    /** 来源内唯一 ID（酷狗 hash / TMDB id / 豆瓣 id） */
     private String sourceId;
 
     /** 标题 */
