@@ -14,14 +14,16 @@
 | UI 库 | Material UI (MUI) v6 —— Material Design 3 风格 |
 | 状态管理 | Zustand（持久化） |
 | 请求 | Axios（拦截器封装） |
-| 字体 | JetBrains Maple Mono（ZSFT CDN，按 unicode-range 分片加载） |
+| 字体 | Space Grotesk（Google Fonts，中文回落系统黑体） |
 
 ---
 
 ## 🎨 设计系统
 
-- **仅深色「Midnight」主题**：近黑深蓝背景 + 大圆角悬浮外壳，不提供浅色切换
-- **强调色**浅紫 `#7C7FF2`，低饱和卡片与颗粒质感
+- **Brutalism（粗野主义）双主题**：浅色（白底黑框）与深色（黑底白框），右上角开关切换，cookie 持久化、SSR 首帧即正确
+- **裸结构**：圆角一律 0px、无阴影（层次靠 3px 实心描边）、无过渡动画、背景铺可见网格
+- **纯原色**：蓝 `#0000FF` / 红 `#FF0000` / 黄 `#FFFF00` + 黑白
+- 设计规范见 [`DESIGN.md`](./DESIGN.md)
 - **导航**：左侧纯图标轨道（悬停提示；管理分组悬停弹出子菜单）
 - **无障碍**：键盘可达，图标按钮均带 `aria-label`
 

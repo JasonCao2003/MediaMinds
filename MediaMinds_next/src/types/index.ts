@@ -101,3 +101,77 @@ export interface SongList {
   [key: string]: unknown;
 }
 
+
+// =============== 媒体消费时长统计 ===============
+
+/** 某个时间范围的三类时长（秒） */
+export interface ActivityRange {
+  total: number;
+  book: number;
+  music: number;
+  video: number;
+}
+
+/** 单日时长明细 */
+export interface ActivityDay {
+  date: string;
+  book: number;
+  music: number;
+  video: number;
+  total: number;
+}
+
+/** 时长汇总（对应 GET /v1/auth/activity/summary） */
+export interface ActivitySummary {
+  today: ActivityRange;
+  week: ActivityRange;
+  month: ActivityRange;
+  year: ActivityRange;
+  all: ActivityRange;
+  daily: ActivityDay[];
+  years: number[];
+  currentStreak: number;
+  longestStreak: number;
+  totalActiveDays: number;
+  firstActiveDate?: string | null;
+}
+
+/** 年度聚合（对应 GET /v1/auth/activity/annual） */
+export interface ActivityAnnual {
+  year: number;
+  totalSeconds: number;
+  bookSeconds: number;
+  musicSeconds: number;
+  videoSeconds: number;
+  activeDays: number;
+  longestStreak: number;
+  firstActiveDate?: string | null;
+  busiestDay?: string | null;
+  busiestDaySeconds: number;
+  busiestMonth: number;
+  busiestMonthSeconds: number;
+  monthlySeconds: number[];
+  daily: ActivityDay[];
+}
+
+/** 年度报告的一个板块 */
+export interface AnnualReportSection {
+  heading: string;
+  body: string;
+}
+
+/** 年度报告（对应 POST /v1/agent/report） */
+export interface AnnualReport {
+  year: number;
+  engine: 'langchain4j' | 'rule' | string;
+  model: string;
+  headline?: string | null;
+  sections: AnnualReportSection[];
+  rawText?: string | null;
+  error?: string | null;
+  /** 最近一次生成时间（从库里读出来时才有） */
+  updatedAt?: string | null;
+}
+
+/** 媒体类型 */
+export type MediaType = 'book' | 'music' | 'video';

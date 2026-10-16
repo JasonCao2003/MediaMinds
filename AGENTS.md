@@ -40,7 +40,7 @@ MediaMinds（媒体智库）—— 智能书影音管理系统。
 | 目录 | 说明 |
 | --- | --- |
 | `MediaMinds_java/` | Spring Cloud 微服务后端（Maven 多模块） |
-| `MediaMinds_next/` | Next.js 15 前端（App Router + MUI v6，深色主题） |
+| `MediaMinds_next/` | Next.js 15 前端（App Router + MUI v6，Brutalism 双主题） |
 | `deploy/` | 本地编排：docker-compose、mysql-init、启停脚本、日志与 pid |
 | `CHANGELOG.md` | 变更日志（按 Keep a Changelog 格式） |
 
@@ -63,6 +63,12 @@ MediaMinds（媒体智库）—— 智能书影音管理系统。
 
 `user_db`、`book_db`、`music_data`、`video_db`
 
+> 时长统计落在 `user_db.user_activity`（用户 × 日期 × 媒体类型，每次上报累加）；
+> AI 年度报告落在 `user_db.user_annual_report`（用户 × 年份唯一，重新生成覆盖）。
+>
+> 「最近观看」列表用 **localStorage**（`MediaMinds_next/src/lib/recent.ts`）而非数据库——
+> 图书与音乐后端都没有阅读 / 播放记录表，只有影视有 `video_db.user_video_interaction`。
+
 > 中文输出需加 `--default-character-set=utf8mb4`，否则显示 `????`。
 
 ### 测试账号
@@ -77,7 +83,7 @@ MediaMinds（媒体智库）—— 智能书影音管理系统。
 2. **媒体本体不入库**：视频 / 音乐 / 图书文件不入库，只存元数据，用户可自行上传。
 3. **数据源标注 `source`**：酷狗音乐、TMDB、豆瓣、Project Gutenberg。
 4. **Agent 降级链路**：`agent-service` 未配置 `DEEPSEEK_API_KEY` 或大模型调用失败时，自动回退规则式解析（`IntentParser`）。改动时保留这条兜底，保证服务始终可用。
-5. **前端仅深色主题**（Midnight），强调色 `#7C7FF2`，字体 JetBrains Maple Mono（ZSFT CDN）。
+5. **前端视觉规范：Brutalism（粗野主义）双主题**（浅色 / 深色，右上角切换，cookie 持久化）。铁律：**圆角一律 0px**、**不用模糊阴影**（层次只由 3px 实心描边表达）、**不加过渡动画**、**不用渐变**；颜色一律走 `var(--mm-*)` 令牌，页面内不手写十六进制色值；标题由 `AppShell` 统一渲染，**不要再用 `PageHeader`**。字体 Space Grotesk（中文回落系统黑体）。**改前端前必读 `MediaMinds_next/DESIGN.md`**。
 6. **密钥不进仓库**：`deploy/.env.local`（TMDB / DeepSeek）已被 `.gitignore` 忽略。不要把它写进任何提交内容或文档示例。
 
 ---
@@ -90,6 +96,17 @@ MediaMinds（媒体智库）—— 智能书影音管理系统。
 4. **`media_type` 主键**：MyBatis-Plus 全局 `id-type` 必须为 `auto`（历史 bug：`ASSIGN_ID` 导致 int 主键溢出）。
 5. **`components/NotificationProvider.tsx` 不是「通知服务」组件**——它是 `lib/notify.ts` 全局 toast 的渲染宿主（axios 拦截器与各页面的 `toast.*` 都靠它），**不要误删**。
 6. **所有服务不依赖配置中心**：已移除 `config-service` 与 `spring-cloud-starter-config`，配置全部来自各服务本地 `application.yml`。
+7. **Maven 增量编译 × Lombok 会产出坏字节码**（已根治，但要知道它长什么样）：
+   症状是服务**启动即崩**，报
+   `java.lang.ClassFormatError: Invalid method Code length 0 in class file com/xupt/xxx/DTO/Yyy`，
+   而 `start-all.sh` 那边只表现为「等待端口超时」，很容易误判成启动慢。
+   只有**部分**带 `@Data` 的类会坏（本次是 9 个：agent-service 5 个、gateway-service 1 个、demo-service 3 个），
+   且只在 `mvn install`（不带 `clean`）之后出现。
+   - **根治手段**：父 pom 的 `maven-compiler-plugin` 已设 `<useIncrementalCompilation>false</useIncrementalCompilation>`
+     并显式声明 `annotationProcessorPaths`；`deploy/rebuild.sh` 后端**默认 `clean install`**。
+   - **排查手段**：`java deploy/tools/CheckClassFiles.java MediaMinds_java/*/target/classes`
+     （用真实类加载器逐个加载。**比对 md5 / jar 与 target/classes 是否一致没有意义**，那只能证明「一致地坏」。）
+   - **绝对不要**用 `bash deploy/rebuild.sh backend --incremental` 来排查此类问题。
 
 ---
 
@@ -97,16 +114,20 @@ MediaMinds（媒体智库）—— 智能书影音管理系统。
 
 ```bash
 # 重新编译（后端 + 前端，只构建不启动）
-bash deploy/rebuild.sh
-bash deploy/rebuild.sh backend --clean     # 仅后端，先 clean
+bash deploy/rebuild.sh                     # 后端默认 clean install + 类文件完整性自检
+bash deploy/rebuild.sh backend             # 仅后端
 bash deploy/rebuild.sh frontend            # 仅前端
 bash deploy/rebuild.sh --typecheck-only    # 后端构建 + 前端仅类型检查
+bash deploy/rebuild.sh backend --incremental   # ⚠ 跳过 clean，可能产出坏字节码，别用
 
-# 后端编译（单模块）
-cd MediaMinds_java && mvn -pl agent-service -DskipTests package
+# 类文件完整性自检（排查 ClassFormatError / 启动即崩）
+java deploy/tools/CheckClassFiles.java MediaMinds_java/*/target/classes
+
+# 后端编译（单模块）—— 手动执行时务必带 clean，理由见「已知坑 7」
+cd MediaMinds_java && mvn -pl agent-service -DskipTests clean package
 
 # 后端全量构建
-cd MediaMinds_java && mvn -DskipTests install
+cd MediaMinds_java && mvn -DskipTests clean install
 
 # 前端类型检查 / 生产构建
 cd MediaMinds_next && npx tsc --noEmit

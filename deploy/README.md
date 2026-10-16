@@ -37,15 +37,22 @@ bash deploy/stop-all.sh --with-infra # 连同 Docker 容器一起停止
 
 ```bash
 bash deploy/rebuild.sh                     # 后端 + 前端
-bash deploy/rebuild.sh backend             # 仅后端（mvn -DskipTests install）
-bash deploy/rebuild.sh frontend            # 仅前端（tsc + npm run build）
-bash deploy/rebuild.sh backend --clean     # 先 clean 再构建
+bash deploy/rebuild.sh backend             # 仅后端（默认 mvn -DskipTests clean install）
+bash deploy/rebuild.sh frontend --clean    # 仅前端（tsc + npm run build，并清 .next）
 bash deploy/rebuild.sh --typecheck-only    # 后端构建 + 前端仅类型检查
+bash deploy/rebuild.sh backend --incremental   # ⚠ 跳过 clean，可能产出坏字节码，别用
 ```
 
 脚本会先做环境检查（Java / Maven / Node / npm），随后逐个构建并汇总耗时；
 前端缺 `node_modules` 时会自动 `npm install`。
 构建产物就绪后由你自行重启：`bash deploy/stop-all.sh && bash deploy/start-all.sh`。
+
+> **后端默认执行 `mvn clean install`**，并在构建成功后跑一次
+> **类文件完整性自检**（`deploy/tools/CheckClassFiles.java`，用真实类加载器逐个加载
+> `target/classes`）。这不是保守：Maven 增量编译与 Lombok 注解处理器冲突会产出
+> `Code` 属性长度为 0 的坏类，服务启动即崩（`ClassFormatError: Invalid method Code length 0`），
+> 而 `start-all.sh` 那边只表现为「等待端口超时」，极易误判为启动慢。
+> 父 pom 已关闭 `useIncrementalCompilation`，脚本再 clean 一次是双保险。
 
 > `start-all.sh` 启动前端时同样使用 **生产模式**（`npm run build && npm start`），
 > 首次启动需要等待构建完成（约 1-2 分钟）。开发调试如需 HMR，可手动改用 `npm run dev`。

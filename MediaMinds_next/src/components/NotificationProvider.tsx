@@ -56,7 +56,12 @@ export default function NotificationProvider({ children }: { children: React.Rea
           severity={current?.severity ?? 'info'}
           variant="filled"
           elevation={6}
-          sx={{ width: '100%', borderRadius: 2.5, fontWeight: 500 }}
+          sx={{
+            width: '100%',
+            borderRadius: 'var(--mm-radius)',
+            fontWeight: 600,
+            boxShadow: 'var(--mm-float)',
+          }}
         >
           {current?.title ? `${current.title}：${current.message}` : current?.message}
         </Alert>

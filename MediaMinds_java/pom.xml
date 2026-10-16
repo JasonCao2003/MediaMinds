@@ -55,6 +55,7 @@
         <spring-boot.version>3.4.4</spring-boot.version>
         <mysql.version>8.2.0</mysql.version>
         <langchain4j.version>1.22.0</langchain4j.version>
+        <lombok.version>1.18.34</lombok.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     </properties>
@@ -83,7 +84,7 @@
             <dependency>
                 <groupId>org.projectlombok</groupId>
                 <artifactId>lombok</artifactId>
-                <version>1.18.34</version>
+                <version>${lombok.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -97,6 +98,32 @@
                 <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
+
+                    <!--
+                      关闭增量编译（默认是 true）。
+                      原因：Maven Compiler Plugin 的增量编译路径会复用 target/classes 里已有的
+                      生成结果，而 Lombok 注解处理器仍会记录已生成的 getter/setter 签名，最终落盘的
+                      Code 属性长度为 0，JVM 校验直接拒绝：
+
+                          java.lang.ClassFormatError: Invalid method Code length 0
+                              in class file com/xupt/agent/Config/AgentLlmProperties
+
+                      症状是「只有部分 Lombok 类」无法加载，且只在 mvn install（不带 clean）之后出现，
+                      非常隐蔽。关闭增量编译后每次都是全量编译，从根上消除该问题。
+                    -->
+                    <useIncrementalCompilation>false</useIncrementalCompilation>
+
+                    <!--
+                      JDK 17+ / MCP 3.12+ 推荐显式声明注解处理器路径，避免处理器从 classpath
+                      被偶然拾取导致构建结果不确定。本项目只用 Lombok 一个处理器。
+                    -->
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
         </plugins>

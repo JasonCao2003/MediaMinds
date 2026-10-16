@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
-  Paper,
   Typography,
   TextField,
   Button,
@@ -15,7 +14,6 @@ import {
   Stack,
   Alert,
   CircularProgress,
-  Avatar,
   Chip,
 } from '@mui/material';
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
@@ -27,6 +25,7 @@ import AutoStoriesRoundedIcon from '@mui/icons-material/AutoStoriesRounded';
 import HeadphonesRoundedIcon from '@mui/icons-material/HeadphonesRounded';
 import MovieRoundedIcon from '@mui/icons-material/MovieRounded';
 import BrandLogo from '@/components/BrandLogo';
+import ThemeToggle from '@/components/common/ThemeToggle';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from '@/lib/notify';
 import { userRegisterService, userInfoService } from '@/api/user';
@@ -35,9 +34,9 @@ import { accountLoginService, emailLoginService, loginValidationService } from '
 type LoginType = 'account' | 'email';
 
 const FEATURES = [
-  { icon: <AutoStoriesRoundedIcon />, title: '智能图书管理', desc: '自动章节划分 · 在线阅读器 · 内容分析' },
-  { icon: <HeadphonesRoundedIcon />, title: '音乐与歌词', desc: '在线播放 · 歌词同步 · 情感分析' },
-  { icon: <MovieRoundedIcon />, title: '影视播放中心', desc: 'TMDB 导入 · 进度记忆 · 评论点赞' },
+  { icon: <AutoStoriesRoundedIcon />, title: '智能图书管理', desc: '自动章节划分 · 在线阅读器' },
+  { icon: <HeadphonesRoundedIcon />, title: '音乐与歌词', desc: '在线播放 · 歌词同步' },
+  { icon: <MovieRoundedIcon />, title: '影视播放中心', desc: 'TMDB 导入 · 进度记忆' },
 ];
 
 export default function LoginPage() {
@@ -163,116 +162,123 @@ export default function LoginPage() {
     }
   };
 
+  const adornment = (icon: React.ReactNode) => ({
+    input: { startAdornment: <InputAdornment position="start">{icon}</InputAdornment> },
+  });
+
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', bgcolor: 'background.default' }}>
-      {/* 左侧品牌区 */}
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'grid',
+        placeItems: 'center',
+        p: { xs: 2, sm: 3, md: 4 },
+        position: 'relative',
+      }}
+    >
+      {/* 右上角主题开关 */}
+      <Box sx={{ position: 'fixed', top: { xs: 16, md: 24 }, right: { xs: 16, md: 24 }, zIndex: 10 }}>
+        <ThemeToggle />
+      </Box>
+
       <Box
         sx={{
-          flex: 1.1,
-          display: { xs: 'none', md: 'flex' },
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          p: { md: 5, lg: 7 },
-          position: 'relative',
+          width: '100%',
+          maxWidth: 1040,
+          borderRadius: 'var(--mm-radius-xl)',
+          bgcolor: 'var(--mm-bg)',
+          boxShadow: 'var(--mm-raised-xl)',
           overflow: 'hidden',
-          color: '#fff',
-          background: 'linear-gradient(150deg, #312E81 0%, #4F46E5 45%, #E11D48 130%)',
-          '&::before': {
-            content: '""',
-            position: 'absolute',
-            inset: 0,
-            backgroundImage:
-              'radial-gradient(circle at 20% 20%, rgba(255,255,255,.18) 0, transparent 40%), radial-gradient(circle at 80% 70%, rgba(255,255,255,.12) 0, transparent 45%)',
-          },
+          display: 'flex',
+          flexDirection: { xs: 'column', md: 'row' },
+          animation: 'mm-fade-in 420ms var(--mm-ease) both',
         }}
       >
-        <Box sx={{ position: 'relative', zIndex: 1 }}>
-          <BrandLogo size={44} tone="light" />
-        </Box>
+        {/* ── 左侧品牌区：灰底色块，用 3px 描边与表单区切开 ────────── */}
+        <Box
+          sx={{
+            display: { xs: 'none', md: 'flex' },
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            width: 400,
+            flexShrink: 0,
+            m: 2,
+            mr: 0,
+            p: 4,
+            borderRadius: 'var(--mm-radius-lg)',
+            bgcolor: 'var(--mm-sunken)',
+            boxShadow: 'var(--mm-sunken-sm)',
+          }}
+        >
+          <BrandLogo size={42} />
 
-        <Box sx={{ position: 'relative', zIndex: 1, maxWidth: 520 }}>
-          <Typography variant="h2" sx={{ fontWeight: 800, lineHeight: 1.15, mb: 2 }}>
-            让媒体管理
-            <br />
-            更简单、更智能
-          </Typography>
-          <Typography variant="h6" sx={{ opacity: 0.85, fontWeight: 400, mb: 5 }}>
-            一站式书影音资源平台 · 融合大模型与语音识别
-          </Typography>
+          <Box>
+            <Typography variant="h4" sx={{ fontWeight: 800, lineHeight: 1.25, mb: 1.5 }}>
+              让媒体管理
+              <br />
+              更简单、更智能
+            </Typography>
+            <Typography color="text.secondary" sx={{ mb: 4 }}>
+              一站式书影音资源平台，由大模型驱动的智能入库。
+            </Typography>
 
-          <Stack spacing={2.5}>
-            {FEATURES.map((f) => (
-              <Stack key={f.title} direction="row" spacing={2} alignItems="center">
-                <Avatar
-                  sx={{
-                    bgcolor: 'rgba(255,255,255,.16)',
-                    color: '#fff',
-                    width: 46,
-                    height: 46,
-                    backdropFilter: 'blur(6px)',
-                  }}
-                >
-                  {f.icon}
-                </Avatar>
-                <Box>
-                  <Typography sx={{ fontWeight: 600 }}>{f.title}</Typography>
-                  <Typography variant="body2" sx={{ opacity: 0.78 }}>
-                    {f.desc}
-                  </Typography>
-                </Box>
-              </Stack>
-            ))}
+            <Stack spacing={2.5}>
+              {FEATURES.map((f) => (
+                <Stack key={f.title} direction="row" spacing={1.75} alignItems="center">
+                  <Box
+                    sx={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 'var(--mm-radius-sm)',
+                      flexShrink: 0,
+                      display: 'grid',
+                      placeItems: 'center',
+                      bgcolor: 'var(--mm-bg)',
+                      boxShadow: 'var(--mm-raised-sm)',
+                      color: 'var(--mm-accent-text)',
+                    }}
+                  >
+                    {f.icon}
+                  </Box>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 700, lineHeight: 1.3 }}>{f.title}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {f.desc}
+                    </Typography>
+                  </Box>
+                </Stack>
+              ))}
+            </Stack>
+          </Box>
+
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <Chip label="Spring Cloud" size="small" />
+            <Chip label="Next.js" size="small" />
+            <Chip label="LangChain4j" size="small" />
           </Stack>
         </Box>
 
-        <Stack direction="row" spacing={1} sx={{ position: 'relative', zIndex: 1 }}>
-          <Chip label="Spring Cloud" size="small" sx={{ bgcolor: 'rgba(255,255,255,.16)', color: '#fff' }} />
-          <Chip label="Next.js · Material" size="small" sx={{ bgcolor: 'rgba(255,255,255,.16)', color: '#fff' }} />
-          <Chip label="AI 加持" size="small" sx={{ bgcolor: 'rgba(255,255,255,.16)', color: '#fff' }} />
-        </Stack>
-      </Box>
-
-      {/* 右侧表单区 */}
-      <Box
-        sx={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          p: { xs: 2.5, sm: 4 },
-        }}
-      >
-        <Paper
-          elevation={0}
-          sx={{
-            width: '100%',
-            maxWidth: 460,
-            p: { xs: 3, sm: 4.5 },
-            borderRadius: 5,
-            border: '1px solid',
-            borderColor: 'divider',
-            animation: 'mm-fade-in 400ms cubic-bezier(.2,0,0,1) both',
-          }}
-        >
+        {/* ── 右侧表单区 ──────────────────────────────────────── */}
+        <Box sx={{ flex: 1, minWidth: 0, p: { xs: 3, sm: 4, md: 5 }, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <Box sx={{ display: { xs: 'flex', md: 'none' }, justifyContent: 'center', mb: 3 }}>
             <BrandLogo size={40} />
           </Box>
 
-          <Typography variant="h4" sx={{ fontWeight: 700, textAlign: 'center' }}>
+          <Typography variant="h4" sx={{ fontWeight: 800, textAlign: 'center' }}>
             {isRegister ? '创建账户' : '欢迎回来'}
           </Typography>
-          <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ mt: 0.5, mb: 3 }}>
+          <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ mt: 0.75, mb: 3.5 }}>
             {isRegister ? '注册 MediaMinds 账户，开启智能管理' : '登录以继续使用 MediaMinds'}
           </Typography>
 
           {isRegister ? (
-            <Stack spacing={2}>
+            <Stack spacing={2.25}>
               <TextField
                 fullWidth
                 label="用户名"
                 value={form.userName}
                 onChange={update('userName')}
-                slotProps={{ input: { startAdornment: <InputAdornment position="start"><PersonRoundedIcon fontSize="small" /></InputAdornment> } }}
+                slotProps={adornment(<PersonRoundedIcon fontSize="small" />)}
                 helperText="长度为 5~16 位非空字符"
               />
               <TextField
@@ -281,7 +287,7 @@ export default function LoginPage() {
                 label="密码"
                 value={form.password}
                 onChange={update('password')}
-                slotProps={{ input: { startAdornment: <InputAdornment position="start"><LockRoundedIcon fontSize="small" /></InputAdornment> } }}
+                slotProps={adornment(<LockRoundedIcon fontSize="small" />)}
               />
               <TextField
                 fullWidth
@@ -289,14 +295,14 @@ export default function LoginPage() {
                 label="确认密码"
                 value={form.rePassword}
                 onChange={update('rePassword')}
-                slotProps={{ input: { startAdornment: <InputAdornment position="start"><LockRoundedIcon fontSize="small" /></InputAdornment> } }}
+                slotProps={adornment(<LockRoundedIcon fontSize="small" />)}
               />
               <TextField
                 fullWidth
                 label="邮箱"
                 value={form.email}
                 onChange={update('email')}
-                slotProps={{ input: { startAdornment: <InputAdornment position="start"><MailRoundedIcon fontSize="small" /></InputAdornment> } }}
+                slotProps={adornment(<MailRoundedIcon fontSize="small" />)}
               />
               <Button
                 variant="contained"
@@ -319,8 +325,7 @@ export default function LoginPage() {
                 value={loginType}
                 onChange={(_, v) => setLoginType(v)}
                 variant="fullWidth"
-                sx={{ mb: 3, bgcolor: 'action.hover', borderRadius: 999, minHeight: 44, p: 0.5 }}
-                TabIndicatorProps={{ sx: { display: 'none' } }}
+                sx={{ mb: 3.5, width: '100%' }}
               >
                 {[
                   { value: 'account', label: '账号', icon: <PersonRoundedIcon fontSize="small" /> },
@@ -332,27 +337,19 @@ export default function LoginPage() {
                     icon={t.icon}
                     iconPosition="start"
                     label={t.label}
-                    sx={{
-                      minHeight: 38,
-                      borderRadius: 999,
-                      mx: 0.25,
-                      ...(loginType === t.value && {
-                        bgcolor: 'background.paper',
-                        boxShadow: 1,
-                      }),
-                    }}
+                    sx={{ flex: 1 }}
                   />
                 ))}
               </Tabs>
 
               {loginType === 'account' && (
-                <Stack spacing={2}>
+                <Stack spacing={2.25}>
                   <TextField
                     fullWidth
                     label="用户名"
                     value={form.userName}
                     onChange={update('userName')}
-                    slotProps={{ input: { startAdornment: <InputAdornment position="start"><PersonRoundedIcon fontSize="small" /></InputAdornment> } }}
+                    slotProps={adornment(<PersonRoundedIcon fontSize="small" />)}
                   />
                   <TextField
                     fullWidth
@@ -361,7 +358,7 @@ export default function LoginPage() {
                     value={form.password}
                     onChange={update('password')}
                     onKeyDown={(e) => e.key === 'Enter' && handleAccountLogin()}
-                    slotProps={{ input: { startAdornment: <InputAdornment position="start"><LockRoundedIcon fontSize="small" /></InputAdornment> } }}
+                    slotProps={adornment(<LockRoundedIcon fontSize="small" />)}
                   />
                   <Button
                     variant="contained"
@@ -370,6 +367,7 @@ export default function LoginPage() {
                     disabled={loading}
                     onClick={handleAccountLogin}
                     startIcon={loading && <CircularProgress size={18} color="inherit" />}
+                    sx={{ mt: 1 }}
                   >
                     登录
                   </Button>
@@ -377,13 +375,13 @@ export default function LoginPage() {
               )}
 
               {loginType === 'email' && (
-                <Stack spacing={2}>
+                <Stack spacing={2.25}>
                   <TextField
                     fullWidth
                     label="邮箱"
                     value={form.email}
                     onChange={update('email')}
-                    slotProps={{ input: { startAdornment: <InputAdornment position="start"><MailRoundedIcon fontSize="small" /></InputAdornment> } }}
+                    slotProps={adornment(<MailRoundedIcon fontSize="small" />)}
                   />
                   <TextField
                     fullWidth
@@ -392,7 +390,11 @@ export default function LoginPage() {
                     onChange={update('verificationCode')}
                     slotProps={{
                       input: {
-                        startAdornment: <InputAdornment position="start"><LockRoundedIcon fontSize="small" /></InputAdornment>,
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <LockRoundedIcon fontSize="small" />
+                          </InputAdornment>
+                        ),
                         endAdornment: (
                           <InputAdornment position="end">
                             <Button size="small" disabled={countdown > 0} onClick={sendCode}>
@@ -410,13 +412,14 @@ export default function LoginPage() {
                     disabled={loading}
                     onClick={handleEmailLogin}
                     startIcon={loading && <CircularProgress size={18} color="inherit" />}
+                    sx={{ mt: 1 }}
                   >
                     邮箱登录
                   </Button>
                 </Stack>
               )}
 
-              <Divider sx={{ my: 3 }}>
+              <Divider sx={{ my: 3.5 }}>
                 <Typography variant="caption" color="text.secondary">
                   还没有账户？
                 </Typography>
@@ -427,10 +430,10 @@ export default function LoginPage() {
             </>
           )}
 
-          <Alert severity="info" variant="outlined" sx={{ mt: 3, borderRadius: 3 }}>
+          <Alert severity="info" sx={{ mt: 3.5 }}>
             用户名与密码长度均为 5~16 位；邮箱登录需先绑定邮箱。
           </Alert>
-        </Paper>
+        </Box>
       </Box>
     </Box>
   );

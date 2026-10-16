@@ -8,50 +8,42 @@ interface BrandLogoProps {
   size?: number;
   showText?: boolean;
   collapsed?: boolean;
-  color?: string;
-  /** 用于浅色背景时显示深色字 */
-  tone?: 'light' | 'dark';
 }
 
 /**
- * MediaMinds 品牌标识（Material 风格的方形应用图标 + 文字标）。
+ * MediaMinds 品牌标识（Brutalism）
+ *
+ * 纯色方块 + 3px 描边 + 大写字标，没有渐变、没有圆角、没有光晕。
  */
-export default function BrandLogo({
-  size = 36,
-  showText = true,
-  collapsed = false,
-  color,
-  tone = 'dark',
-}: BrandLogoProps) {
-  const textColor = color ?? (tone === 'light' ? '#FFFFFF' : 'text.primary');
+export default function BrandLogo({ size = 36, showText = true, collapsed = false }: BrandLogoProps) {
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
       <Box
         sx={{
           width: size,
           height: size,
-          borderRadius: size * 0.3,
           display: 'grid',
           placeItems: 'center',
-          background: 'linear-gradient(140deg, #7C7FF2 0%, #8B5CF6 100%)',
-          boxShadow: '0 10px 24px -10px rgba(124,127,242,.9)',
           flexShrink: 0,
+          backgroundColor: 'var(--mm-accent)',
+          boxShadow: 'var(--mm-raised-sm)',
         }}
       >
-        <AutoStoriesRoundedIcon sx={{ fontSize: size * 0.58, color: '#fff' }} />
+        <AutoStoriesRoundedIcon sx={{ fontSize: size * 0.56, color: 'var(--mm-accent-contrast)' }} />
       </Box>
       {showText && !collapsed && (
         <Typography
           variant="h6"
           sx={{
-            fontWeight: 800,
-            fontFamily: 'inherit',
-            letterSpacing: '-0.02em',
-            color: textColor,
+            fontWeight: 900,
+            letterSpacing: '-0.03em',
+            textTransform: 'uppercase',
+            color: 'var(--mm-text)',
             whiteSpace: 'nowrap',
+            lineHeight: 1,
           }}
         >
-          Media<span style={{ opacity: 0.72 }}>Minds</span>
+          Media<span style={{ color: 'var(--mm-accent-text)' }}>Minds</span>
         </Typography>
       )}
     </Box>

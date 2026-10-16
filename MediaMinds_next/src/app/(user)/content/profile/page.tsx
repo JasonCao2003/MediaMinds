@@ -8,7 +8,6 @@ import {
   Button,
   Card,
   CardContent,
-  Divider,
   FormControl,
   InputLabel,
   MenuItem,
@@ -19,14 +18,14 @@ import {
   TextField,
   Typography,
   LinearProgress,
+  useTheme,
 } from '@mui/material';
 import PhotoCameraRoundedIcon from '@mui/icons-material/PhotoCameraRounded';
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
 import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded';
 import LockRoundedIcon from '@mui/icons-material/LockRounded';
 import DeleteForeverRoundedIcon from '@mui/icons-material/DeleteForeverRounded';
-import AccountCircleRoundedIcon from '@mui/icons-material/AccountCircleRounded';
-import PageHeader from '@/components/common/PageHeader';
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import { useConfirm } from '@/components/common/ConfirmProvider';
 import AutoGrid from '@/components/common/AutoGrid';
 import { useAuthStore } from '@/stores/authStore';
@@ -52,6 +51,7 @@ interface ProfileForm {
 export default function UserProfilePage() {
   const router = useRouter();
   const confirm = useConfirm();
+  const { mm } = useTheme();
   const { info, setInfo, logout } = useAuthStore();
 
   const [tab, setTab] = useState('profile');
@@ -181,33 +181,33 @@ export default function UserProfilePage() {
 
   return (
     <Box>
-      <PageHeader title="个人信息" subtitle="管理你的账户资料与安全设置" icon={<AccountCircleRoundedIcon />} />
-
       <AutoGrid minWidth={300} gap={3} columns={{ xs: '1fr', md: '320px 1fr' }}>
         {/* 左侧名片 */}
-        <Card sx={{ borderRadius: 4, height: 'fit-content' }}>
-          <CardContent sx={{ textAlign: 'center', py: 4 }}>
+        <Card sx={{ borderRadius: 'var(--mm-radius-xl)', height: 'fit-content' }}>
+          <CardContent sx={{ textAlign: 'center', py: 4, px: 3 }}>
             <Box sx={{ position: 'relative', display: 'inline-block' }}>
               <Avatar
+                variant="rounded"
                 src={form.avatar || undefined}
-                sx={{ width: 120, height: 120, mx: 'auto', fontSize: 44, boxShadow: 3 }}
+                sx={{ width: 120, height: 120, mx: 'auto', fontSize: 44, borderRadius: 'var(--mm-radius-lg)' }}
               >
                 {(form.nickName || form.userName || '用')[0]}
               </Avatar>
               <input ref={fileRef} type="file" accept="image/jpeg,image/png" hidden onChange={onAvatarChange} />
               <Button
                 variant="contained"
+                aria-label="上传头像"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
                 sx={{
                   position: 'absolute',
                   bottom: 0,
                   right: 0,
-                  minWidth: 40,
-                  width: 40,
-                  height: 40,
+                  minWidth: 44,
+                  width: 44,
+                  height: 44,
                   p: 0,
-                  borderRadius: '50%',
+                  borderRadius: 0,
                 }}
               >
                 <PhotoCameraRoundedIcon fontSize="small" />
@@ -223,15 +223,24 @@ export default function UserProfilePage() {
           </CardContent>
         </Card>
 
-        {/* 右侧表单 */}
-        <Card sx={{ borderRadius: 4 }}>
-          <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ px: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+        {/* 右侧表单：分组卡片 */}
+        <Box sx={{ minWidth: 0 }}>
+          <Tabs value={tab} onChange={(_, v) => setTab(v)}>
             <Tab value="profile" label="基本资料" />
             <Tab value="security" label="安全设置" />
           </Tabs>
-          <CardContent sx={{ p: 3 }}>
-            {tab === 'profile' ? (
+
+          {tab === 'profile' ? (
+            <Card sx={{ mt: 2.5, p: { xs: 2.5, md: 3 }, borderRadius: 'var(--mm-radius-xl)' }}>
               <Stack spacing={2.5}>
+                <Box>
+                  <Typography variant="h6" fontWeight={700}>
+                    基本资料
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    这些信息会展示在你的个人空间与分享内容中。
+                  </Typography>
+                </Box>
                 <AutoGrid minWidth={240} columns={{ xs: '1fr', sm: '1fr 1fr' }}>
                   <TextField label="用户名" value={form.userName} onChange={(e) => setForm((f) => ({ ...f, userName: e.target.value }))} />
                   <TextField label="昵称" value={form.nickName} onChange={(e) => setForm((f) => ({ ...f, nickName: e.target.value }))} />
@@ -279,62 +288,71 @@ export default function UserProfilePage() {
                   </Button>
                 </Stack>
               </Stack>
-            ) : (
-              <Stack spacing={3}>
-                <Box>
-                  <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
-                    修改密码
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    密码长度为 5~16 位，修改后需要重新登录。
-                  </Typography>
-                  <Stack spacing={2} sx={{ maxWidth: 420 }}>
-                    <TextField
-                      type="password"
-                      label="旧密码"
-                      value={pwd.oldPassword}
-                      onChange={(e) => setPwd((p) => ({ ...p, oldPassword: e.target.value }))}
-                    />
-                    <TextField
-                      type="password"
-                      label="新密码"
-                      value={pwd.newPassword}
-                      onChange={(e) => setPwd((p) => ({ ...p, newPassword: e.target.value }))}
-                    />
-                    <TextField
-                      type="password"
-                      label="确认新密码"
-                      value={pwd.confirmPassword}
-                      onChange={(e) => setPwd((p) => ({ ...p, confirmPassword: e.target.value }))}
-                    />
-                    <Button
-                      variant="contained"
-                      startIcon={<LockRoundedIcon />}
-                      onClick={changePassword}
-                      disabled={changingPwd}
-                    >
-                      确认修改
-                    </Button>
-                  </Stack>
-                </Box>
+            </Card>
+          ) : (
+            <Stack spacing={3} sx={{ mt: 2.5 }}>
+              <Card sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 'var(--mm-radius-xl)' }}>
+                <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
+                  修改密码
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  密码长度为 5~16 位，修改后需要重新登录。
+                </Typography>
+                <Stack spacing={2} sx={{ maxWidth: 420 }}>
+                  <TextField
+                    type="password"
+                    label="旧密码"
+                    value={pwd.oldPassword}
+                    onChange={(e) => setPwd((p) => ({ ...p, oldPassword: e.target.value }))}
+                  />
+                  <TextField
+                    type="password"
+                    label="新密码"
+                    value={pwd.newPassword}
+                    onChange={(e) => setPwd((p) => ({ ...p, newPassword: e.target.value }))}
+                  />
+                  <TextField
+                    type="password"
+                    label="确认新密码"
+                    value={pwd.confirmPassword}
+                    onChange={(e) => setPwd((p) => ({ ...p, confirmPassword: e.target.value }))}
+                  />
+                  <Button
+                    variant="contained"
+                    startIcon={<LockRoundedIcon />}
+                    onClick={changePassword}
+                    disabled={changingPwd}
+                  >
+                    确认修改
+                  </Button>
+                </Stack>
+              </Card>
 
-                <Divider />
-
-                <Box>
-                  <Typography variant="h6" fontWeight={700} sx={{ color: 'error.main', mb: 1 }}>
+              {/* 危险操作：独立灰底区块，与普通表单区分 */}
+              <Box
+                sx={{
+                  p: { xs: 2.5, md: 3 },
+                  borderRadius: 'var(--mm-radius-xl)',
+                  bgcolor: 'var(--mm-sunken)',
+                  boxShadow: 'var(--mm-sunken-sm)',
+                }}
+              >
+                <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1 }}>
+                  <WarningAmberRoundedIcon sx={{ color: mm.danger }} />
+                  <Typography variant="h6" fontWeight={700} sx={{ color: mm.danger }}>
                     危险操作
                   </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    注销账号将永久删除你的所有数据，且无法恢复。
-                  </Typography>
-                  <Button variant="outlined" color="error" startIcon={<DeleteForeverRoundedIcon />} onClick={deleteAccount}>
-                    注销账号
-                  </Button>
-                </Box>
-              </Stack>
-            )}
-          </CardContent>
-        </Card>
+                </Stack>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  注销账号将永久删除你的所有数据，且无法恢复。
+                </Typography>
+                <Button variant="outlined" color="error" startIcon={<DeleteForeverRoundedIcon />} onClick={deleteAccount}>
+                  注销账号
+                </Button>
+              </Box>
+            </Stack>
+          )}
+        </Box>
       </AutoGrid>
     </Box>
   );

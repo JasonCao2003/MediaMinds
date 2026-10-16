@@ -14,7 +14,6 @@ import {
   Slider,
   Stack,
   Typography,
-  useTheme,
 } from '@mui/material';
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
@@ -24,6 +23,8 @@ import FullscreenExitRoundedIcon from '@mui/icons-material/FullscreenExitRounded
 import VolumeUpRoundedIcon from '@mui/icons-material/VolumeUpRounded';
 import VolumeOffRoundedIcon from '@mui/icons-material/VolumeOffRounded';
 import { getMovieByIdService, updateWatchRecordService } from '@/api/video';
+import { useActivityTracker } from '@/hooks/useActivityTracker';
+import { pushRecent } from '@/lib/recent';
 import type { Movie } from '@/types';
 
 function fmt(sec: number) {
@@ -36,7 +37,6 @@ function fmt(sec: number) {
 export default function MoviePlayerPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const theme = useTheme();
   const id = params?.id as string;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -50,6 +50,8 @@ export default function MoviePlayerPage() {
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  /** 新版本把观看进度存成 0-1 的比例，等元数据加载后再换算成秒定位 */
+  const [resumeRatio, setResumeRatio] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -59,7 +61,10 @@ export default function MoviePlayerPage() {
         if (res.code === 200 && res.data) {
           const m = res.data as Movie & { watchProgress?: number };
           setMovie(m);
-          if (m.watchProgress) setCurrent(Number(m.watchProgress));
+          // 兼容历史数据：旧版本把「秒数」写进了 watchProgress，新版本写的是 0-1 的比例
+          const stored = Number(m.watchProgress) || 0;
+          if (stored > 1) setCurrent(stored);
+          else if (stored > 0) setResumeRatio(stored);
         }
       })
       .finally(() => setLoading(false));
@@ -69,7 +74,11 @@ export default function MoviePlayerPage() {
   const saveRecord = () => {
     const video = videoRef.current;
     if (!video || !id) return;
-    updateWatchRecordService(id, Math.floor(video.currentTime), Math.floor(video.currentTime)).catch(() => undefined);
+    const position = Math.floor(video.currentTime);
+    // watchProgress 的约定是 0-1 的比例（历史 bug：这里曾把秒数当成比例传上去，
+    // 导致库里出现 watch_progress = 23.00 这种越界值）
+    const ratio = video.duration > 0 ? Number((video.currentTime / video.duration).toFixed(2)) : 0;
+    updateWatchRecordService(id, position, ratio).catch(() => undefined);
   };
 
   useEffect(() => {
@@ -86,6 +95,20 @@ export default function MoviePlayerPage() {
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
+
+  // 观影时长：只有真正在播放时才计时（暂停 / 切走标签页都不计）
+  useActivityTracker('video', playing && Boolean(id));
+
+  // 记入「最近观看」（本地记录，供视频页的「最近观看」使用）
+  useEffect(() => {
+    if (!playing || !id) return;
+    pushRecent('video', {
+      id,
+      title: movie?.name || movie?.movieName || '未命名',
+      subtitle: movie?.directedBy || movie?.director,
+      cover: movie?.pic || movie?.cover,
+    });
+  }, [playing, id, movie]);
 
   const togglePlay = () => {
     const v = videoRef.current;
@@ -109,19 +132,20 @@ export default function MoviePlayerPage() {
 
   return (
     <Box>
-      <Button startIcon={<ArrowBackRoundedIcon />} onClick={() => router.back()} sx={{ mb: 2 }}>
+      <Button variant="outlined" startIcon={<ArrowBackRoundedIcon />} onClick={() => router.back()} sx={{ mb: 2.5 }}>
         返回
       </Button>
 
+      {/* 播放器：描边方块包裹视频，控制条作为浮层压在视频上 */}
       <Box
         ref={containerRef}
         sx={{
           position: 'relative',
           width: '100%',
-          bgcolor: '#000',
-          borderRadius: fullscreen ? 0 : 4,
+          bgcolor: 'var(--mm-bg)',
+          borderRadius: fullscreen ? 0 : 'var(--mm-radius-xl)',
+          boxShadow: fullscreen ? 'none' : 'var(--mm-raised-lg)',
           overflow: 'hidden',
-          boxShadow: 4,
         }}
       >
         <Box
@@ -133,29 +157,48 @@ export default function MoviePlayerPage() {
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
           onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)}
-          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+          onLoadedMetadata={(e) => {
+            setDuration(e.currentTarget.duration);
+            // 存的是比例，等拿到 duration 再换算成秒定位
+            if (resumeRatio > 0 && e.currentTarget.duration > 0) {
+              const target = resumeRatio * e.currentTarget.duration;
+              e.currentTarget.currentTime = target;
+              setCurrent(target);
+              setResumeRatio(0);
+            }
+          }}
           onEnded={() => setPlaying(false)}
-          sx={{ width: '100%', aspectRatio: '16 / 9', display: 'block', cursor: 'pointer', bgcolor: '#000' }}
+          sx={{
+            width: '100%',
+            aspectRatio: '16 / 9',
+            display: 'block',
+            cursor: 'pointer',
+            bgcolor: 'var(--mm-sunken)',
+          }}
         />
 
-        {/* 控制栏 */}
+        {/* 控制条：压在视频上的浮层 */}
         <Box
           sx={{
             position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            px: 2,
-            py: 1.5,
-            background: 'linear-gradient(to top, rgba(0,0,0,.75), transparent)',
-            color: '#fff',
+            left: { xs: 10, md: 14 },
+            right: { xs: 10, md: 14 },
+            bottom: { xs: 10, md: 14 },
+            px: 1.75,
+            py: 0.75,
+            borderRadius: 'var(--mm-radius-lg)',
+            bgcolor: 'var(--mm-bg)',
+            color: 'var(--mm-text)',
+            boxShadow: 'var(--mm-float)',
           }}
         >
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <IconButton onClick={togglePlay} sx={{ color: '#fff' }} aria-label={playing ? '暂停' : '播放'}>
+          <Stack direction="row" spacing={{ xs: 1, md: 1.5 }} alignItems="center">
+            <IconButton onClick={togglePlay} aria-label={playing ? '暂停' : '播放'}>
               {playing ? <PauseRoundedIcon /> : <PlayArrowRoundedIcon />}
             </IconButton>
-            <Typography variant="caption">{fmt(current)}</Typography>
+            <Typography variant="caption" sx={{ fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+              {fmt(current)}
+            </Typography>
             <Slider
               size="small"
               value={current}
@@ -165,11 +208,13 @@ export default function MoviePlayerPage() {
                 setCurrent(val);
                 if (videoRef.current) videoRef.current.currentTime = val;
               }}
-              sx={{ flex: 1, color: '#fff' }}
+              sx={{ flex: 1 }}
               aria-label="播放进度"
             />
-            <Typography variant="caption">{fmt(duration)}</Typography>
-            <IconButton onClick={() => setMuted((m) => !m)} sx={{ color: '#fff' }} aria-label="静音">
+            <Typography variant="caption" sx={{ fontVariantNumeric: 'tabular-nums', flexShrink: 0, display: { xs: 'none', sm: 'block' } }}>
+              {fmt(duration)}
+            </Typography>
+            <IconButton onClick={() => setMuted((m) => !m)} aria-label="静音">
               {muted ? <VolumeOffRoundedIcon /> : <VolumeUpRoundedIcon />}
             </IconButton>
             <Slider
@@ -181,17 +226,26 @@ export default function MoviePlayerPage() {
                 setVolume(val);
                 if (videoRef.current) videoRef.current.volume = val;
               }}
-              sx={{ width: 90, color: '#fff' }}
+              sx={{ width: 90, flexShrink: 0, display: { xs: 'none', sm: 'block' } }}
               aria-label="音量"
             />
-            <IconButton onClick={toggleFullscreen} sx={{ color: '#fff' }} aria-label="全屏">
+            <IconButton onClick={toggleFullscreen} aria-label="全屏">
               {fullscreen ? <FullscreenExitRoundedIcon /> : <FullscreenRoundedIcon />}
             </IconButton>
           </Stack>
         </Box>
 
         {!src && !loading && (
-          <Box sx={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'rgba(255,255,255,.7)' }}>
+          <Box
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
+              color: 'var(--mm-text-2)',
+              pointerEvents: 'none',
+            }}
+          >
             <Stack alignItems="center" spacing={1}>
               <PlayArrowRoundedIcon sx={{ fontSize: 64 }} />
               <Typography>该影片暂无可播放的视频源</Typography>
@@ -200,8 +254,9 @@ export default function MoviePlayerPage() {
         )}
       </Box>
 
-      <Card sx={{ mt: 3, borderRadius: 4 }}>
-        <CardContent>
+      {/* 影片信息 */}
+      <Card sx={{ mt: 3, borderRadius: 'var(--mm-radius-xl)' }}>
+        <CardContent sx={{ p: { xs: 2.5, md: 3.5 }, '&:last-child': { pb: { xs: 2.5, md: 3.5 } } }}>
           {loading ? (
             <Stack spacing={1}>
               <Skeleton variant="text" width={240} sx={{ fontSize: '1.6rem' }} />
@@ -209,7 +264,7 @@ export default function MoviePlayerPage() {
             </Stack>
           ) : (
             <>
-              <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1.5 }}>
+              <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
                 <Typography variant="h5" fontWeight={700}>
                   {movie?.name}
                 </Typography>
@@ -225,7 +280,17 @@ export default function MoviePlayerPage() {
               <Typography variant="body1" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
                 {(movie?.abs as string) || (movie?.info as string) || '暂无简介'}
               </Typography>
-              <Box sx={{ mt: 2, p: 1.5, borderRadius: 2, bgcolor: theme.palette.action.hover }}>
+
+              {/* 播放进度说明：灰底提示条 */}
+              <Box
+                sx={{
+                  mt: 2.5,
+                  p: 1.75,
+                  borderRadius: 'var(--mm-radius)',
+                  bgcolor: 'var(--mm-sunken)',
+                  boxShadow: 'var(--mm-sunken-sm)',
+                }}
+              >
                 <Typography variant="caption" color="text.secondary">
                   播放进度会自动记忆（每 15 秒保存一次），下次观看将从断点继续。
                 </Typography>

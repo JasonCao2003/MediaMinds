@@ -3,7 +3,9 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
+import Stack from '@mui/material/Stack';
 import CircularProgress from '@mui/material/CircularProgress';
+import BrandLogo from '@/components/BrandLogo';
 import { useAuthStore } from '@/stores/authStore';
 
 /**
@@ -31,10 +33,13 @@ export default function HomePage() {
         minHeight: '100vh',
         display: 'grid',
         placeItems: 'center',
-        bgcolor: 'background.default',
+        bgcolor: 'var(--mm-bg)',
       }}
     >
-      <CircularProgress />
+      <Stack alignItems="center" spacing={3}>
+        <BrandLogo size={44} />
+        <CircularProgress aria-label="正在跳转" />
+      </Stack>
     </Box>
   );
 }

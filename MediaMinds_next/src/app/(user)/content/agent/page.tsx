@@ -8,18 +8,18 @@ import {
   Card,
   Checkbox,
   Chip,
-  CircularProgress,
   MenuItem,
   Stack,
   TextField,
   Typography,
+  useTheme,
 } from '@mui/material';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import SendRoundedIcon from '@mui/icons-material/SendRounded';
 import CloudDownloadRoundedIcon from '@mui/icons-material/CloudDownloadRounded';
 import AutorenewRoundedIcon from '@mui/icons-material/AutorenewRounded';
 import BuildRoundedIcon from '@mui/icons-material/BuildRounded';
-import PageHeader from '@/components/common/PageHeader';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import EmptyState from '@/components/common/EmptyState';
 import { toast } from '@/lib/notify';
 import {
@@ -78,7 +78,12 @@ const TOOL_LABEL: Record<string, string> = {
 
 const keyOf = (c: AgentCandidate) => `${c.source}:${c.sourceId}`;
 
+/** 气泡尾巴：左下/右下角收窄，其余用标准圆角令牌 */
+const TAIL_LEFT = 'var(--mm-radius) var(--mm-radius) var(--mm-radius) var(--mm-radius-xs)';
+const TAIL_RIGHT = 'var(--mm-radius) var(--mm-radius) var(--mm-radius-xs) var(--mm-radius)';
+
 export default function AgentPage() {
+  const { mm } = useTheme();
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [input, setInput] = useState('');
   const [type, setType] = useState('auto');
@@ -179,22 +184,42 @@ export default function AgentPage() {
     }
   };
 
+  /** Agent 头像：描边小方块，让「谁在说话」不只靠左右对齐区分 */
+  const agentAvatar = (
+    <Box
+      sx={{
+        width: 36,
+        height: 36,
+        borderRadius: 'var(--mm-radius-sm)',
+        flexShrink: 0,
+        display: 'grid',
+        placeItems: 'center',
+        bgcolor: 'var(--mm-bg)',
+        boxShadow: 'var(--mm-raised-sm)',
+        color: 'var(--mm-accent-text)',
+      }}
+    >
+      <AutoAwesomeRoundedIcon sx={{ fontSize: 20 }} />
+    </Box>
+  );
+
   const renderCandidate = (c: AgentCandidate) => {
     const k = keyOf(c);
     const checked = Boolean(selected[k]);
     return (
       <Card
         key={k}
-        variant="outlined"
         onClick={() => toggleSelect(c)}
         sx={{
           display: 'flex',
           alignItems: 'center',
           gap: 1.25,
-          p: 1,
+          p: 1.25,
           cursor: 'pointer',
-          borderColor: checked ? 'primary.main' : undefined,
-          bgcolor: checked ? 'rgba(124,127,242,.10)' : 'transparent',
+          borderRadius: 'var(--mm-radius)',
+          // 选中 = 灰底 + 更粗的描边；未选中 = 白底 + 细描边（不靠颜色单独传达）
+          bgcolor: checked ? 'var(--mm-sunken)' : 'var(--mm-bg)',
+          boxShadow: checked ? 'var(--mm-raised-lg)' : 'var(--mm-raised-sm)',
         }}
       >
         <Checkbox checked={checked} size="small" tabIndex={-1} sx={{ p: 0.5 }} />
@@ -210,11 +235,14 @@ export default function AgentPage() {
           </Typography>
         </Box>
         {typeof c.rate === 'number' && c.rate > 0 && (
-          <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 700 }}>
+          <Typography variant="caption" sx={{ color: mm.warning, fontWeight: 700 }}>
             {c.rate.toFixed(1)}
           </Typography>
         )}
         <Chip size="small" label={SOURCE_LABEL[c.source] ?? c.source} />
+        {checked && (
+          <Chip size="small" label="已选" sx={{ color: mm.success, fontWeight: 700 }} />
+        )}
       </Card>
     );
   };
@@ -232,13 +260,7 @@ export default function AgentPage() {
 
   return (
     <Box>
-      <PageHeader
-        title="智能入库"
-        subtitle="用自然语言描述你想要的视频 / 图书 / 音乐，Agent 检索并结构化后入库元信息"
-        icon={<AutoAwesomeRoundedIcon />}
-      />
-
-      <Card sx={{ p: 2.5, mb: 2 }}>
+      <Card sx={{ p: 2.5, mb: 2.5, borderRadius: 'var(--mm-radius-lg)' }}>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
           <TextField
             select
@@ -279,10 +301,11 @@ export default function AgentPage() {
       <Card
         sx={{
           p: 2.5,
-          mb: 2,
+          mb: 2.5,
           minHeight: 320,
           maxHeight: '56vh',
           overflowY: 'auto',
+          borderRadius: 'var(--mm-radius-lg)',
         }}
       >
         {messages.length === 0 ? (
@@ -302,9 +325,10 @@ export default function AgentPage() {
                         maxWidth: '78%',
                         px: 2,
                         py: 1.25,
-                        borderRadius: '18px 18px 4px 18px',
-                        bgcolor: 'primary.main',
-                        color: '#fff',
+                        borderRadius: TAIL_RIGHT,
+                        bgcolor: 'var(--mm-bg)',
+                        boxShadow: 'var(--mm-raised-sm)',
+                        color: 'var(--mm-text)',
                         fontWeight: 600,
                       }}
                     >
@@ -315,16 +339,18 @@ export default function AgentPage() {
               }
               if (m.text) {
                 return (
-                  <Box key={m.id} sx={{ display: 'flex' }}>
+                  <Box key={m.id} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                    {agentAvatar}
                     <Box
                       sx={{
                         maxWidth: '78%',
                         px: 2,
                         py: 1.25,
-                        borderRadius: '18px 18px 18px 4px',
-                        bgcolor: 'action.hover',
-                        border: '1px solid',
-                        borderColor: 'divider',
+                        borderRadius: TAIL_LEFT,
+                        bgcolor: 'var(--mm-sunken)',
+                        boxShadow: 'var(--mm-sunken-sm)',
+                        color: 'var(--mm-text)',
+                        whiteSpace: 'pre-wrap',
                       }}
                     >
                       {m.text}
@@ -335,165 +361,218 @@ export default function AgentPage() {
               const result = m.result;
               const groups = (result?.groups ?? []).filter((g) => g.candidates.length > 0 || g.error || g.hint);
               return (
-                <Box key={m.id}>
-                  {result?.reply && (
-                    <Box
-                      sx={{
-                        maxWidth: '78%',
-                        px: 2,
-                        py: 1.25,
-                        mb: 1.5,
-                        borderRadius: '18px 18px 18px 4px',
-                        bgcolor: 'action.hover',
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        whiteSpace: 'pre-wrap',
-                      }}
-                    >
-                      {result.reply}
-                    </Box>
-                  )}
+                <Box key={m.id} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                  {agentAvatar}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    {result?.reply && (
+                      <Box
+                        sx={{
+                          maxWidth: '78%',
+                          px: 2,
+                          py: 1.25,
+                          mb: 1.5,
+                          borderRadius: TAIL_LEFT,
+                          bgcolor: 'var(--mm-sunken)',
+                          boxShadow: 'var(--mm-sunken-sm)',
+                          color: 'var(--mm-text)',
+                          whiteSpace: 'pre-wrap',
+                        }}
+                      >
+                        {result.reply}
+                      </Box>
+                    )}
 
-                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ mb: 1.5 }}>
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      color={result?.engine === 'langchain4j' ? 'primary' : 'default'}
-                      label={result?.engine === 'langchain4j' ? 'LangChain4j' : '规则解析'}
-                    />
-                    {result?.tools?.map((t, i) => (
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ mb: 1.5 }}>
                       <Chip
-                        key={`${t}-${i}`}
                         size="small"
                         variant="outlined"
-                        icon={<BuildRoundedIcon />}
-                        label={TOOL_LABEL[t] ?? t}
+                        color={result?.engine === 'langchain4j' ? 'primary' : 'default'}
+                        label={result?.engine === 'langchain4j' ? 'LangChain4j' : '规则解析'}
                       />
-                    ))}
-                    {result?.usage?.totalTokens ? (
-                      <Typography variant="caption" color="text.secondary">
-                        {result.usage.totalTokens} tokens
-                      </Typography>
-                    ) : null}
-                  </Stack>
+                      {result?.tools?.map((t, i) => (
+                        <Chip
+                          key={`${t}-${i}`}
+                          size="small"
+                          variant="outlined"
+                          icon={<BuildRoundedIcon />}
+                          label={TOOL_LABEL[t] ?? t}
+                        />
+                      ))}
+                      {result?.usage?.totalTokens ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {result.usage.totalTokens} tokens
+                        </Typography>
+                      ) : null}
+                    </Stack>
 
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                    识别结果：类型「{TYPE_LABEL[result?.intent.type ?? 'auto'] ?? '全部'}」· 维度「
-                    {BY_OPTIONS.find((o) => o.value === result?.intent.by)?.label ?? result?.intent.by}」· 关键词「
-                    {result?.intent.keyword || '—'}」
-                  </Typography>
-                  {result?.hint && (
-                    <Typography variant="body2" color="warning.main" sx={{ mb: 1.5 }}>
-                      {result.hint}
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                      识别结果：类型「{TYPE_LABEL[result?.intent.type ?? 'auto'] ?? '全部'}」· 维度「
+                      {BY_OPTIONS.find((o) => o.value === result?.intent.by)?.label ?? result?.intent.by}」· 关键词「
+                      {result?.intent.keyword || '—'}」
                     </Typography>
-                  )}
-                  {result?.error && (
-                    <Typography variant="body2" color="warning.main" sx={{ mb: 1.5 }}>
-                      {result.error}
-                    </Typography>
-                  )}
-                  <Stack spacing={2}>
-                    {groups.map((g) => (
-                      <Box key={`${g.type}-${g.label}`}>
-                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                          <Typography variant="subtitle2" fontWeight={700}>
-                            {g.label}
-                          </Typography>
-                          {g.person && (
-                            <Chip
-                              size="small"
-                              color="primary"
-                              label={`${g.person.role === 'director' ? '导演' : '演员'}：${g.person.name}`}
-                            />
+                    {result?.hint && (
+                      <Typography variant="body2" sx={{ color: mm.warning, fontWeight: 600, mb: 1.5 }}>
+                        提示：{result.hint}
+                      </Typography>
+                    )}
+                    {result?.error && (
+                      <Typography variant="body2" sx={{ color: mm.danger, fontWeight: 600, mb: 1.5 }}>
+                        异常：{result.error}
+                      </Typography>
+                    )}
+                    <Stack spacing={2}>
+                      {groups.map((g) => (
+                        <Box key={`${g.type}-${g.label}`}>
+                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                            <Typography variant="subtitle2" fontWeight={700}>
+                              {g.label}
+                            </Typography>
+                            {g.person && (
+                              <Chip
+                                size="small"
+                                color="primary"
+                                label={`${g.person.role === 'director' ? '导演' : '演员'}：${g.person.name}`}
+                              />
+                            )}
+                            <Typography variant="caption" color="text.secondary">
+                              {g.candidates.length} 条候选
+                              {typeof g.total === 'number' ? ` / 共 ${g.total}` : ''}
+                            </Typography>
+                          </Stack>
+                          {g.error && (
+                            <Typography variant="caption" sx={{ color: mm.danger, fontWeight: 600 }}>
+                              数据源异常：{g.error}
+                            </Typography>
                           )}
-                          <Typography variant="caption" color="text.secondary">
-                            {g.candidates.length} 条候选
-                            {typeof g.total === 'number' ? ` / 共 ${g.total}` : ''}
-                          </Typography>
-                        </Stack>
-                        {g.error && (
-                          <Typography variant="caption" color="error.main">
-                            数据源异常：{g.error}
-                          </Typography>
-                        )}
-                        {g.hint && (
-                          <Typography variant="caption" color="text.secondary">
-                            {g.hint}
-                          </Typography>
-                        )}
-                        {g.candidates.length > 0 && (
-                          <Box
-                            sx={{
-                              display: 'grid',
-                              gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' },
-                              gap: 1.5,
-                            }}
-                          >
-                            {g.candidates.map(renderCandidate)}
-                          </Box>
-                        )}
-                      </Box>
-                    ))}
-                  </Stack>
+                          {g.hint && (
+                            <Typography variant="caption" color="text.secondary">
+                              {g.hint}
+                            </Typography>
+                          )}
+                          {g.candidates.length > 0 && (
+                            <Box
+                              sx={{
+                                display: 'grid',
+                                gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' },
+                                gap: 1.5,
+                              }}
+                            >
+                              {g.candidates.map(renderCandidate)}
+                            </Box>
+                          )}
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Box>
                 </Box>
               );
             })}
             {loading && (
-              <Stack direction="row" spacing={1.5} alignItems="center">
-                <CircularProgress size={18} />
-                <Typography variant="body2" color="text.secondary">
-                  Agent 正在思考并检索数据源…
-                </Typography>
-              </Stack>
+              <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                {agentAvatar}
+                <Stack
+                  direction="row"
+                  spacing={1.25}
+                  alignItems="center"
+                  sx={{
+                    px: 2,
+                    py: 1.5,
+                    borderRadius: TAIL_LEFT,
+                    bgcolor: 'var(--mm-sunken)',
+                    boxShadow: 'var(--mm-sunken-sm)',
+                  }}
+                >
+                  {[0, 1, 2].map((i) => (
+                    <Box
+                      key={i}
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 0,
+                        bgcolor: 'var(--mm-text-3)',
+                        animation: 'mm-scale-in 900ms var(--mm-ease) infinite alternate',
+                        animationDelay: `${i * 160}ms`,
+                      }}
+                    />
+                  ))}
+                  <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                    Agent 正在思考并检索数据源…
+                  </Typography>
+                </Stack>
+              </Box>
             )}
           </Stack>
         )}
       </Card>
 
-      <Card sx={{ p: 2 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'flex-end' }}>
-          <TextField
-            fullWidth
-            multiline
-            maxRows={3}
-            size="small"
-            placeholder="例如：我想要周杰伦的歌 / 帮我找电影 星际穿越 / 有没有刘慈欣写的书"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
-          />
-          <Button
-            variant="contained"
-            startIcon={<SendRoundedIcon />}
-            onClick={send}
-            disabled={loading}
-            sx={{ minWidth: 110, height: 40 }}
-          >
-            发送
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<CloudDownloadRoundedIcon />}
-            onClick={doImport}
-            disabled={importing || selectedList.length === 0}
-            sx={{ minWidth: 150, height: 40 }}
-          >
-            批量入库{selectedList.length > 0 ? `（${selectedList.length}）` : ''}
-          </Button>
-          <Button
-            variant="text"
-            startIcon={<AutorenewRoundedIcon />}
-            onClick={newSession}
-            disabled={messages.length === 0 && !sessionId}
-            sx={{ minWidth: 110, height: 40 }}
-          >
-            新会话
-          </Button>
+      <Card sx={{ p: 2.5, borderRadius: 'var(--mm-radius-lg)' }}>
+        <Stack spacing={2}>
+          {selectedList.length > 0 && (
+            <Box
+              sx={{
+                p: 1.5,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                flexWrap: 'wrap',
+                borderRadius: 'var(--mm-radius)',
+                bgcolor: 'var(--mm-sunken)',
+                boxShadow: 'var(--mm-sunken-sm)',
+              }}
+            >
+              <CheckCircleRoundedIcon sx={{ color: mm.success, fontSize: 22 }} />
+              <Typography variant="body2" fontWeight={700}>
+                已选 {selectedList.length} 条，等待确认入库
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                仅入库元数据，媒体本体请在对应列表页自行上传
+              </Typography>
+            </Box>
+          )}
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'flex-end' }}>
+            <TextField
+              fullWidth
+              multiline
+              maxRows={3}
+              size="small"
+              placeholder="例如：我想要周杰伦的歌 / 帮我找电影 星际穿越 / 有没有刘慈欣写的书"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+            />
+            <Button
+              variant="contained"
+              startIcon={<SendRoundedIcon />}
+              onClick={send}
+              disabled={loading}
+              sx={{ minWidth: 110, height: 40 }}
+            >
+              发送
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<CloudDownloadRoundedIcon />}
+              onClick={doImport}
+              disabled={importing || selectedList.length === 0}
+              sx={{ minWidth: 150, height: 40 }}
+            >
+              批量入库{selectedList.length > 0 ? `（${selectedList.length}）` : ''}
+            </Button>
+            <Button
+              variant="text"
+              startIcon={<AutorenewRoundedIcon />}
+              onClick={newSession}
+              disabled={messages.length === 0 && !sessionId}
+              sx={{ minWidth: 110, height: 40 }}
+            >
+              新会话
+            </Button>
+          </Stack>
         </Stack>
       </Card>
     </Box>

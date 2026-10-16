@@ -1,12 +1,100 @@
+/* ============================================================================
+   MediaMinds · Brutalism 基础层
+   ----------------------------------------------------------------------------
+   裸结构、零修饰：圆角 0px、无阴影、无过渡动画，层次完全由 3px 实心描边表达。
+   颜色与描边以 CSS 变量表达，由 <html data-theme="light|dark"> 切换。
+   SSR 阶段服务端直接读取 cookie 写入该属性，首帧即正确主题，无闪烁。
+   ========================================================================= */
+
 :root {
-  --mm-sidebar-width: 76px;
-  --mm-header-height: 76px;
-  --mm-player-height: 88px;
-  --mm-app-bg: #0e1018;
-  --mm-shell: #161923;
-  --mm-surface: #1e2230;
-  --mm-border: rgba(255, 255, 255, 0.07);
-  --mm-accent: #7c7ff2;
+  --mm-sidebar-width: 244px;
+  --mm-header-height: 84px;
+  /* 移动端贴底播放条的高度（行高 44 + 上下内边距 16 + 上边线 2），
+     用于给内容区计算底部留白，避免压住分页器 */
+  --mm-player-height: 62px;
+
+  /* Brutalism：所有圆角一律 0 */
+  --mm-radius-xs: 0px;
+  --mm-radius-sm: 0px;
+  --mm-radius: 0px;
+  --mm-radius-lg: 0px;
+  --mm-radius-xl: 0px;
+
+  /* Brutalism：拒绝过渡动画 */
+  --mm-ease: step-end;
+  --mm-ease-press: step-end;
+
+  --mm-font: 'Space Grotesk', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', system-ui,
+    -apple-system, 'Segoe UI', sans-serif;
+}
+
+/* ── 浅色：白底黑框 + 纯原色 ────────────────────────────────────────── */
+html[data-theme='light'] {
+  color-scheme: light;
+
+  --mm-bg: #ffffff;
+  --mm-sunken: #f1f1f1;
+  --mm-text: #000000;
+  --mm-text-2: #3a3a3a;
+  --mm-text-3: #6e6e6e;
+  --mm-border-color: #000000;
+  --mm-grid: rgba(0, 0, 0, 0.07);
+
+  --mm-accent: #0000ff;
+  --mm-accent-hover: #0000cc;
+  --mm-accent-contrast: #ffffff;
+  --mm-accent-text: #0000ff;
+  --mm-accent-soft: #d8d8ff;
+
+  --mm-red: #ff0000;
+  --mm-yellow: #ffff00;
+  --mm-blue: #0000ff;
+
+  /* 「阴影」令牌在 Brutalism 下语义变为描边环（不占盒模型，无布局位移） */
+  --mm-raised-sm: 0 0 0 2px var(--mm-border-color);
+  --mm-raised: 0 0 0 3px var(--mm-border-color);
+  --mm-raised-lg: 0 0 0 4px var(--mm-border-color);
+  --mm-raised-xl: 0 0 0 5px var(--mm-border-color);
+  --mm-sunken-sm: inset 0 0 0 2px var(--mm-border-color);
+  --mm-sunken: inset 0 0 0 3px var(--mm-border-color);
+  --mm-sunken-lg: inset 0 0 0 4px var(--mm-border-color);
+  --mm-float: 0 0 0 3px var(--mm-border-color), 8px 8px 0 0 var(--mm-border-color);
+
+  --mm-scroll: #000000;
+}
+
+/* ── 深色：黑底白框；填充仍是纯原色 ────────────────────────────────── */
+html[data-theme='dark'] {
+  color-scheme: dark;
+
+  --mm-bg: #000000;
+  --mm-sunken: #141414;
+  --mm-text: #ffffff;
+  --mm-text-2: #c9c9c9;
+  --mm-text-3: #8a8a8a;
+  --mm-border-color: #ffffff;
+  --mm-grid: rgba(255, 255, 255, 0.09);
+
+  --mm-accent: #2b2bff;
+  --mm-accent-hover: #4a4aff;
+  --mm-accent-contrast: #ffffff;
+  --mm-accent-text: #8c8cff;
+  --mm-accent-soft: #1a1a4d;
+
+  --mm-red: #ff0000;
+  --mm-yellow: #ffff00;
+  --mm-blue: #0000ff;
+
+  --mm-raised-sm: 0 0 0 2px var(--mm-border-color);
+  --mm-raised: 0 0 0 3px var(--mm-border-color);
+  --mm-raised-lg: 0 0 0 4px var(--mm-border-color);
+  --mm-raised-xl: 0 0 0 5px var(--mm-border-color);
+  --mm-sunken-sm: inset 0 0 0 2px var(--mm-border-color);
+  --mm-sunken: inset 0 0 0 3px var(--mm-border-color);
+  --mm-sunken-lg: inset 0 0 0 4px var(--mm-border-color);
+  --mm-float: 0 0 0 3px var(--mm-border-color), 8px 8px 0 0 var(--mm-border-color);
+
+  --mm-scroll: #ffffff;
 }
 
 * {
@@ -22,22 +110,12 @@ body {
 
 body {
   min-height: 100vh;
-  background-color: var(--mm-app-bg);
-  color: #eaebf2;
+  background-color: var(--mm-bg);
+  color: var(--mm-text);
+  font-family: var(--mm-font);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-}
-
-/* 细微颗粒质感叠加（参考图的噪点表面） */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 a {
@@ -45,80 +123,98 @@ a {
   text-decoration: none;
 }
 
-/* MediaMinds 动效基元 */
-@keyframes mm-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* ── Brutalism：全局禁止过渡动画 ─────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  transition-property: none !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
 }
 
-@keyframes mm-scale-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+/* ── 基元类（与旧命名兼容，语义已换成描边 / 灰底）───────────────────── */
+
+.mm-raised-sm {
+  box-shadow: var(--mm-raised-sm);
+}
+.mm-raised {
+  box-shadow: var(--mm-raised);
+}
+.mm-raised-lg {
+  box-shadow: var(--mm-raised-lg);
+}
+.mm-sunken {
+  box-shadow: var(--mm-sunken);
+}
+.mm-sunken-sm {
+  box-shadow: var(--mm-sunken-sm);
+}
+.mm-float {
+  box-shadow: var(--mm-float);
 }
 
-@keyframes mm-spin {
-  to {
-    transform: rotate(360deg);
-  }
+/** 按下反馈：整体位移，瞬时生效（无过渡） */
+.mm-press:hover {
+  background-color: var(--mm-sunken);
+}
+.mm-press:active {
+  transform: translate(3px, 3px);
+  box-shadow: none;
 }
 
-.mm-fade-in {
-  animation: mm-fade-in 320ms cubic-bezier(0.2, 0, 0, 1) both;
-}
-
-.mm-scale-in {
-  animation: mm-scale-in 240ms cubic-bezier(0.2, 0, 0, 1) both;
-}
-
-.mm-hover-lift {
-  transition: transform 220ms cubic-bezier(0.2, 0, 0, 1), box-shadow 220ms cubic-bezier(0.2, 0, 0, 1),
-    border-color 220ms;
-}
-
+/** 卡片悬停：瞬时换成灰底（Brutalism 不做位移与投影） */
 .mm-hover-lift:hover {
-  transform: translateY(-4px);
-  border-color: rgba(255, 255, 255, 0.14) !important;
+  background-color: var(--mm-sunken);
 }
 
-/* 悬浮外壳 */
-.mm-shell {
-  background: linear-gradient(180deg, #191d28 0%, #14171f 100%);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 28px;
-  box-shadow: 0 40px 80px -24px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+/* ── 动效：Brutalism 下入场动画直接取消（内容瞬时出现）──────────────── */
+.mm-fade-in,
+.mm-scale-in {
+  animation: none;
 }
 
-/* 尊重用户减少动效偏好 */
+/* 骨架屏 / 加载指示保留动画：它是状态反馈，不是装饰 */
+@keyframes mm-skeleton-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes mm-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* ── 顶部路由进度条：纯色方块，无渐变无圆角 ─────────────────────────── */
+.mm-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 5px;
+  z-index: 2000;
+  background: var(--mm-accent);
+}
+
+/* ── 尊重「减少动效」偏好 ───────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
   }
 }
 
-/* 顶部加载进度条 */
-.mm-progress-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  height: 3px;
-  z-index: 2000;
-  background: linear-gradient(90deg, #7c7ff2, #8b5cf6);
-  transition: width 200ms ease;
+/* ── 文字选中：反白 ─────────────────────────────────────────────────── */
+::selection {
+  background: var(--mm-text);
+  color: var(--mm-bg);
 }

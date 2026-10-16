@@ -59,9 +59,9 @@ export default function ConfirmProvider({ children }: { children: ReactNode }) {
         onClose={() => close(false)}
         maxWidth="xs"
         fullWidth
-        slotProps={{ paper: { sx: { borderRadius: 4, p: 1 } } }}
+        slotProps={{ paper: { sx: { borderRadius: 'var(--mm-radius-xl)', p: 1 } } }}
       >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontWeight: 700 }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontWeight: 800, pt: 2.5 }}>
           {options.danger && <WarningAmberRoundedIcon color="error" />}
           {options.title ?? '确认操作'}
         </DialogTitle>

@@ -109,7 +109,7 @@ flowchart TB
 | 服务治理 | Eureka（注册发现）、Spring Cloud Gateway（网关） |
 | 服务通信 | OpenFeign、RESTful API |
 | 安全认证 | Spring Security、JWT（单角色，无权限校验） |
-| 前端 | Next.js 15（App Router）、TypeScript、Material UI v6（Material Design 3）、Zustand、Axios |
+| 前端 | Next.js 15（App Router）、TypeScript、Material UI v6（Brutalism 粗野主义双主题）、Zustand、Axios |
 | 持久化 | MySQL 8.x、MyBatis-Plus、Redis 6.x |
 | 对象存储 | MinIO |
 | 智能体 | LangChain4j 1.22（工具调用 / 多轮记忆）、DeepSeek（OpenAI 兼容协议） |

@@ -135,7 +135,10 @@ public class BookService {
         try {
             Page<Book> pageInfo = new Page<>(page, size);
             LambdaQueryWrapper<Book> queryWrapper = new LambdaQueryWrapper<>();
+            // 占位符写的是「书名或作者」，这里把作者也纳入模糊匹配
             queryWrapper.like(Book::getBookName, keyword)
+                    .or()
+                    .like(Book::getBookAuthor, keyword)
                     .or()
                     .like(Book::getBookDetails, keyword)
                     .orderByDesc(Book::getCreateTime);

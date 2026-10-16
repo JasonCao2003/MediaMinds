@@ -12,6 +12,11 @@ interface EmptyStateProps {
   minHeight?: number;
 }
 
+/**
+ * 空状态
+ *
+ * 图标放进一个灰底描边方块里，配合弱化文案，空态也不显得「断片」。
+ */
 export default function EmptyState({
   icon,
   title = '暂无内容',
@@ -27,17 +32,32 @@ export default function EmptyState({
         placeItems: 'center',
         textAlign: 'center',
         color: 'text.secondary',
-        gap: 1,
         p: 4,
       }}
     >
-      <Box sx={{ display: 'grid', placeItems: 'center', gap: 1.5 }}>
-        {icon && <Box sx={{ fontSize: 56, opacity: 0.35, lineHeight: 1 }}>{icon}</Box>}
-        <Typography variant="h6" color="text.primary">
+      <Box sx={{ display: 'grid', placeItems: 'center', gap: 2 }}>
+        {icon && (
+          <Box
+            sx={{
+              width: 96,
+              height: 96,
+              borderRadius: 0,
+              display: 'grid',
+              placeItems: 'center',
+              bgcolor: 'var(--mm-sunken)',
+              boxShadow: 'var(--mm-sunken-sm)',
+              color: 'var(--mm-text-3)',
+              '& svg': { fontSize: 40 },
+            }}
+          >
+            {icon}
+          </Box>
+        )}
+        <Typography variant="h6" color="text.primary" sx={{ fontWeight: 700 }}>
           {title}
         </Typography>
         {description && (
-          <Typography variant="body2" sx={{ maxWidth: 360 }}>
+          <Typography variant="body2" sx={{ maxWidth: 380 }}>
             {description}
           </Typography>
         )}

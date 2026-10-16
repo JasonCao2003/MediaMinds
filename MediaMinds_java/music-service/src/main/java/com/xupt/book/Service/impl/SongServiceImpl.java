@@ -22,7 +22,10 @@ public class SongServiceImpl implements SongService {
     @Override
     public IPage<Song> getSongsByPage(Integer pageNum, Integer pageSize) {
         Page<Song> page = new Page<>(pageNum, pageSize);
-        return songMapper.selectPage(page, null);
+        // 按入库时间倒序 —— 前端「最近添加」直接复用这个接口
+        QueryWrapper<Song> queryWrapper = new QueryWrapper<>();
+        queryWrapper.orderByDesc("create_time");
+        return songMapper.selectPage(page, queryWrapper);
     }
 
     @Override

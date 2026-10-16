@@ -6,7 +6,6 @@ import {
   Box,
   Button,
   Card,
-  CardActionArea,
   CardContent,
   Chip,
   Dialog,
@@ -19,14 +18,16 @@ import {
   ListItem,
   ListItemAvatar,
   ListItemText,
-  Rating,
   Skeleton,
   Stack,
   Tab,
   Tabs,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
+  useTheme,
 } from '@mui/material';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
@@ -37,10 +38,11 @@ import QueueMusicRoundedIcon from '@mui/icons-material/QueueMusicRounded';
 import LyricsRoundedIcon from '@mui/icons-material/LyricsRounded';
 import ChatBubbleOutlineRoundedIcon from '@mui/icons-material/ChatBubbleOutlineRounded';
 import HeadphonesRoundedIcon from '@mui/icons-material/HeadphonesRounded';
-import PageHeader from '@/components/common/PageHeader';
 import KugouPanel from '@/components/user/KugouPanel';
 import EmptyState from '@/components/common/EmptyState';
 import AutoGrid from '@/components/common/AutoGrid';
+import CoverImage from '@/components/common/CoverImage';
+import { getRecent, relativeTime, type RecentItem } from '@/lib/recent';
 import { toast } from '@/lib/notify';
 import { normalizePage } from '@/lib/page';
 import { useAuthStore } from '@/stores/authStore';
@@ -48,7 +50,6 @@ import { usePlayerStore, type Track } from '@/stores/playerStore';
 import {
   getAllSongsService,
   getSongByNameService,
-  getSongsBySingerNameService,
   getAllSingersService,
   getAllSongListsService,
   getSongListByLikeTitleService,
@@ -61,19 +62,26 @@ import {
   likeCommentService,
 } from '@/api/music';
 
-type TabKey = 'songs' | 'singers' | 'songlists' | 'favorites' | 'kugou';
+type TabKey = 'recent' | 'songs' | 'songlists' | 'favorites' | 'kugou';
+type RecentMode = 'added' | 'watched';
 
 const PAGE_SIZE = 12;
+
+/** 「最近添加」一眼看完，不分页 */
+const RECENT_SIZE = 24;
 
 export default function MusicViewPage() {
   const userId = useAuthStore((s) => s.info?.userId) || 0;
   const { current, playing, play, addToPlaylist, playList, setPlaying } = usePlayerStore();
 
-  const [tab, setTab] = useState<TabKey>('songs');
+  const [tab, setTab] = useState<TabKey>('recent');
+  const [recentMode, setRecentMode] = useState<RecentMode>('added');
   const [keyword, setKeyword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const [songs, setSongs] = useState<Record<string, unknown>[]>([]);
+  const [recentAdded, setRecentAdded] = useState<Record<string, unknown>[]>([]);
+  const [recentWatched, setRecentWatched] = useState<RecentItem[]>([]);
   const [singers, setSingers] = useState<Record<string, unknown>[]>([]);
   const [songLists, setSongLists] = useState<Record<string, unknown>[]>([]);
   const [collections, setCollections] = useState<Record<string, unknown>[]>([]);
@@ -94,11 +102,22 @@ export default function MusicViewPage() {
     }
   }, [keyword]);
 
+  /** 仅用于补全歌曲歌手名的后台预取，不参与前台 loading 状态 */
   const fetchSingers = useCallback(async () => {
-    setLoading(true);
     try {
       const res = await getAllSingersService({ pageNum: 1, pageSize: 500 });
       setSingers(normalizePage<Record<string, unknown>>(res).rows);
+    } catch {
+      /* 拿不到歌手名时列表回落「未知歌手」，不影响其他功能 */
+    }
+  }, []);
+
+  /** 最近添加：直接复用 /list（后端已按 create_time 倒序），只取一页 */
+  const fetchRecentAdded = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await getAllSongsService({ pageNum: 1, pageSize: RECENT_SIZE });
+      setRecentAdded(normalizePage<Record<string, unknown>>(res).rows);
     } finally {
       setLoading(false);
     }
@@ -134,11 +153,17 @@ export default function MusicViewPage() {
   }, []);
 
   useEffect(() => {
-    if (tab === 'songs') fetchSongs();
-    else if (tab === 'singers') fetchSingers();
+    if (tab === 'recent') {
+      if (recentMode === 'added') {
+        fetchRecentAdded();
+      } else {
+        // 最近观看走本地记录，不需要请求后端
+        setRecentWatched(getRecent('music'));
+      }
+    } else if (tab === 'songs') fetchSongs();
     else if (tab === 'songlists') fetchSongLists();
     else if (tab === 'favorites') fetchCollections();
-  }, [tab, fetchSongs, fetchSingers, fetchSongLists, fetchCollections]);
+  }, [tab, recentMode, fetchSongs, fetchRecentAdded, fetchSongLists, fetchCollections]);
 
   // 歌手名映射：进入页面即预取，供歌曲列表补全 singerName
   useEffect(() => {
@@ -172,6 +197,21 @@ export default function MusicViewPage() {
     }),
     [singerNameById],
   );
+
+  /** 「最近」Tab 的列表：最近添加取后端，最近观看取本地记录 */
+  const displayRecent = useMemo<Record<string, unknown>[]>(() => {
+    if (recentMode === 'watched') {
+      // 本地记录只有卡片快照，把「最近时间」作为 meta 展示
+      return recentWatched.map((r) => ({
+        id: Number(r.id),
+        name: r.title,
+        singerName: r.subtitle || '未知歌手',
+        pic: r.cover,
+        recentAt: relativeTime(r.at),
+      }));
+    }
+    return recentAdded.map(withSinger);
+  }, [recentMode, recentWatched, recentAdded, withSinger]);
 
   const currentIsPlaying = (id: unknown) => String(current?.id) === String(id) && playing;
 
@@ -261,26 +301,37 @@ export default function MusicViewPage() {
 
   return (
     <Box>
-      <PageHeader title="音乐浏览" subtitle="聆听声音画廊，在线播放与歌词同步" icon={<HeadphonesRoundedIcon />} />
-
-      <Card sx={{ p: 2.5, mb: 3, borderRadius: 4 }}>
+      <Card sx={{ p: 2.5, mb: 3.5, borderRadius: 'var(--mm-radius-lg)' }}>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ md: 'center' }}>
           <Tabs
             value={tab}
+            variant="scrollable"
+            scrollButtons={false}
             onChange={(_, v) => {
               setTab(v);
               setKeyword('');
             }}
-            sx={{ minHeight: 44 }}
           >
-            <Tab value="songs" label="全部歌曲" />
-            <Tab value="singers" label="歌手" />
+            <Tab value="recent" label="最近" />
+            <Tab value="songs" label="全部" />
             <Tab value="songlists" label="歌单" />
-            <Tab value="favorites" label="我的收藏" />
+            <Tab value="favorites" label="收藏" />
             <Tab value="kugou" label="酷狗搜索" />
           </Tabs>
           <Box sx={{ flex: 1 }} />
-          {tab !== 'singers' && tab !== 'favorites' && tab !== 'kugou' && (
+          {/* 「最近」的两种口径 */}
+          {tab === 'recent' && (
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={recentMode}
+              onChange={(_, v) => v && setRecentMode(v as RecentMode)}
+            >
+              <ToggleButton value="added">最近添加</ToggleButton>
+              <ToggleButton value="watched">最近观看</ToggleButton>
+            </ToggleButtonGroup>
+          )}
+          {(tab === 'songs' || tab === 'songlists') && (
             <TextField
               size="small"
               placeholder={tab === 'songs' ? '搜索歌曲名称' : '搜索歌单标题'}
@@ -307,8 +358,8 @@ export default function MusicViewPage() {
       ) : loading ? (
         <AutoGrid minWidth={240}>
           {Array.from({ length: 8 }).map((_, i) => (
-            <Card key={i} sx={{ borderRadius: 4 }}>
-              <Skeleton variant="rectangular" height={140} />
+            <Card key={i} sx={{ borderRadius: 'var(--mm-radius-lg)', overflow: 'hidden' }}>
+              <Skeleton variant="rectangular" height={140} sx={{ borderRadius: 'var(--mm-radius-lg) var(--mm-radius-lg) 0 0' }} />
               <CardContent>
                 <Skeleton variant="text" />
               </CardContent>
@@ -338,36 +389,31 @@ export default function MusicViewPage() {
             ))}
           </AutoGrid>
         )
-      ) : tab === 'singers' ? (
-        singers.length === 0 ? (
-          <EmptyState icon={<HeadphonesRoundedIcon sx={{ fontSize: 64 }} />} title="暂无歌手" />
+      ) : tab === 'recent' ? (
+        displayRecent.length === 0 ? (
+          <EmptyState
+            icon={<HeadphonesRoundedIcon sx={{ fontSize: 64 }} />}
+            title={recentMode === 'added' ? '暂无歌曲' : '暂无收听记录'}
+            description={recentMode === 'added' ? undefined : '播放过的歌曲会出现在这里'}
+          />
         ) : (
-          <AutoGrid minWidth={220}>
-            {singers.map((sg) => (
-              <Card key={String(sg.id)} className="mm-hover-lift" sx={{ borderRadius: 4, textAlign: 'center' }}>
-                <CardActionArea
-                  onClick={async () => {
-                    const res = await getSongsBySingerNameService(String(sg.name), { pageNum: 1, pageSize: 50 });
-                    const rows = normalizePage<Record<string, unknown>>(res).rows;
-                    if (rows.length) {
-                      playList(rows.map(toTrack));
-                      toast.success(`开始播放 ${sg.name} 的歌曲`);
-                    } else toast.warning('该歌手暂无歌曲');
-                  }}
-                >
-                  <CardContent>
-                    <Avatar src={(sg.avatar as string) || undefined} sx={{ width: 88, height: 88, mx: 'auto', mb: 1.5 }}>
-                      {(String(sg.name ?? '歌'))[0]}
-                    </Avatar>
-                    <Typography variant="subtitle1" fontWeight={700}>
-                      {String(sg.name ?? '')}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {[sg.sex, sg.location].filter(Boolean).join(' · ') || '歌手'}
-                    </Typography>
-                  </CardContent>
-                </CardActionArea>
-              </Card>
+          <AutoGrid minWidth={300}>
+            {displayRecent.map((s) => (
+              <SongRow
+                key={String(s.id)}
+                song={s}
+                meta={s.recentAt as string}
+                playing={currentIsPlaying(s.id)}
+                favorite={favoriteIds.includes(String(s.id))}
+                onPlay={() => handlePlay(s)}
+                onQueue={() => {
+                  addToPlaylist(toTrack(s));
+                  toast.success('已加入播放列表');
+                }}
+                onFavorite={() => toggleFavorite(s)}
+                onLyric={() => openLyric(s)}
+                onComment={() => openComments(s)}
+              />
             ))}
           </AutoGrid>
         )
@@ -377,19 +423,27 @@ export default function MusicViewPage() {
         ) : (
           <AutoGrid minWidth={260}>
             {songLists.map((l) => (
-              <Card key={String(l.id)} className="mm-hover-lift" sx={{ borderRadius: 4, overflow: 'hidden' }}>
+              <Card key={String(l.id)} className="mm-hover-lift" sx={{ borderRadius: 'var(--mm-radius-lg)', overflow: 'hidden' }}>
                 <Box sx={{ position: 'relative' }}>
-                  <Box
-                    component="img"
-                    src={(l.img as string) || '/cover.jpg'}
+                  <CoverImage
+                    src={l.img as string}
                     alt={String(l.title)}
-                    sx={{ width: '100%', height: 180, objectFit: 'cover', display: 'block' }}
+                    sx={{ width: '100%', height: 180, objectFit: 'cover', display: 'block', bgcolor: 'var(--mm-sunken)' }}
                   />
                   <IconButton
                     onClick={() => playSongList(l)}
-                    sx={{ position: 'absolute', bottom: 10, right: 10, bgcolor: 'rgba(255,255,255,.92)', '&:hover': { bgcolor: '#fff' } }}
+                    aria-label="播放歌单"
+                    sx={{
+                      position: 'absolute',
+                      bottom: 12,
+                      right: 12,
+                      bgcolor: 'var(--mm-bg)',
+                      color: 'var(--mm-accent-text)',
+                      boxShadow: 'var(--mm-float)',
+                      '&:hover': { bgcolor: 'var(--mm-bg)', color: 'var(--mm-accent-text)' },
+                    }}
                   >
-                    <PlayArrowRoundedIcon color="primary" />
+                    <PlayArrowRoundedIcon />
                   </IconButton>
                 </Box>
                 <CardContent>
@@ -433,11 +487,11 @@ export default function MusicViewPage() {
             sx={{
               maxHeight: 380,
               overflowY: 'auto',
-              p: 2,
-              borderRadius: 3,
-              bgcolor: 'action.hover',
+              p: 2.5,
+              borderRadius: 'var(--mm-radius)',
+              bgcolor: 'var(--mm-sunken)',
+              boxShadow: 'var(--mm-sunken-sm)',
               whiteSpace: 'pre-wrap',
-              fontFamily: 'monospace',
               fontSize: 13,
             }}
           >
@@ -496,6 +550,7 @@ export default function MusicViewPage() {
 
 function SongRow({
   song,
+  meta,
   playing,
   favorite,
   onPlay,
@@ -505,6 +560,7 @@ function SongRow({
   onComment,
 }: {
   song: Record<string, unknown>;
+  meta?: string;
   playing: boolean;
   favorite: boolean;
   onPlay: () => void;
@@ -513,43 +569,71 @@ function SongRow({
   onLyric: () => void;
   onComment: () => void;
 }) {
+  const { mm } = useTheme();
   return (
-    <Card sx={{ borderRadius: 3, display: 'flex', alignItems: 'center', p: 1.25, gap: 1.5 }}>
-      <Avatar variant="rounded" src={(song.pic as string) || undefined} sx={{ width: 52, height: 52 }}>
-        {(String(song.name ?? '歌'))[0]}
-      </Avatar>
+    <Card
+      className="mm-hover-lift"
+      sx={{ borderRadius: 'var(--mm-radius)', display: 'flex', alignItems: 'center', p: 1.5, gap: 1.5 }}
+    >
+      <Box
+        sx={{
+          width: 52,
+          height: 52,
+          flexShrink: 0,
+          overflow: 'hidden',
+          bgcolor: 'var(--mm-sunken)',
+          boxShadow: 'var(--mm-raised-sm)',
+        }}
+      >
+        <CoverImage
+          src={song.pic as string}
+          alt={String(song.name ?? '封面')}
+          sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      </Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography variant="subtitle2" fontWeight={700} noWrap>
           {String(song.name ?? '未知歌曲')}
         </Typography>
-        <Typography variant="caption" color="text.secondary" noWrap>
-          {String(song.singerName ?? '未知歌手')}
-        </Typography>
+        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {String(song.singerName ?? '未知歌手')}
+          </Typography>
+          {meta ? (
+            <Typography variant="caption" sx={{ color: 'var(--mm-text-3)', flexShrink: 0 }} noWrap>
+              · {meta}
+            </Typography>
+          ) : null}
+        </Stack>
       </Box>
       <Stack direction="row" spacing={0.25}>
         <Tooltip title={playing ? '暂停' : '播放'}>
-          <IconButton size="small" onClick={onPlay}>
+          <IconButton size="small" aria-label={playing ? '暂停' : '播放'} onClick={onPlay}>
             {playing ? <PauseRoundedIcon color="primary" /> : <PlayArrowRoundedIcon />}
           </IconButton>
         </Tooltip>
         <Tooltip title="加入播放列表">
-          <IconButton size="small" onClick={onQueue}>
+          <IconButton size="small" aria-label="加入播放列表" onClick={onQueue}>
             <QueueMusicRoundedIcon fontSize="small" />
           </IconButton>
         </Tooltip>
         <Tooltip title="歌词">
-          <IconButton size="small" onClick={onLyric}>
+          <IconButton size="small" aria-label="歌词" onClick={onLyric}>
             <LyricsRoundedIcon fontSize="small" />
           </IconButton>
         </Tooltip>
         <Tooltip title="评论">
-          <IconButton size="small" onClick={onComment}>
+          <IconButton size="small" aria-label="评论" onClick={onComment}>
             <ChatBubbleOutlineRoundedIcon fontSize="small" />
           </IconButton>
         </Tooltip>
         <Tooltip title={favorite ? '取消收藏' : '收藏'}>
-          <IconButton size="small" onClick={onFavorite}>
-            {favorite ? <FavoriteRoundedIcon fontSize="small" color="secondary" /> : <FavoriteBorderRoundedIcon fontSize="small" />}
+          <IconButton size="small" aria-label={favorite ? '取消收藏' : '收藏'} onClick={onFavorite}>
+            {favorite ? (
+              <FavoriteRoundedIcon fontSize="small" sx={{ color: mm.warning }} />
+            ) : (
+              <FavoriteBorderRoundedIcon fontSize="small" />
+            )}
           </IconButton>
         </Tooltip>
       </Stack>

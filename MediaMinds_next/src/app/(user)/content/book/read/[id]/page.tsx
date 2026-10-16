@@ -7,12 +7,8 @@ import {
   Button,
   Card,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Drawer,
   Divider,
+  Drawer,
   IconButton,
   InputAdornment,
   List,
@@ -23,17 +19,20 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useTheme,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import ArrowBackIosNewRoundedIcon from '@mui/icons-material/ArrowBackIosNewRounded';
 import ArrowForwardIosRoundedIcon from '@mui/icons-material/ArrowForwardIosRounded';
 import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
-import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import StarBorderRoundedIcon from '@mui/icons-material/StarBorderRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import { toast } from '@/lib/notify';
+import { useActivityTracker } from '@/hooks/useActivityTracker';
+import { pushRecent } from '@/lib/recent';
 import { useAuthStore } from '@/stores/authStore';
 import {
   getBookByIdService,
@@ -51,11 +50,14 @@ interface ReaderSettings {
   width: number;
 }
 
-const THEMES: Record<ReaderSettings['theme'], { bg: string; text: string; label: string }> = {
-  light: { bg: '#ffffff', text: '#1f2937', label: '明亮' },
-  sepia: { bg: '#f6ecd8', text: '#5b4636', label: '羊皮纸' },
-  green: { bg: '#e8f5e9', text: '#2e4a34', label: '护眼' },
-  dark: { bg: '#1a1a1a', text: '#d1d5db', label: '夜间' },
+type ReaderThemeKey = ReaderSettings['theme'];
+
+/** 阅读底色的中文名（颜色本身由令牌派生，见组件内的 THEMES） */
+const THEME_LABELS: Record<ReaderThemeKey, string> = {
+  light: '明亮',
+  sepia: '羊皮纸',
+  green: '护眼',
+  dark: '夜间',
 };
 
 const SETTINGS_KEY = 'mm_reader_settings';
@@ -65,6 +67,7 @@ export default function BookReaderPage() {
   const params = useParams<{ id: string }>();
   const search = useSearchParams();
   const router = useRouter();
+  const { mm } = useTheme();
   const userId = useAuthStore((s) => s.info?.userId) || 0;
   const bookId = params?.id as string;
 
@@ -180,6 +183,20 @@ export default function BookReaderPage() {
     [content],
   );
 
+  // 阅读时长：正文加载完成且页面可见时计时（切走标签页 / 离开页面自动停）
+  useActivityTracker('book', !loading && paragraphs.length > 0);
+
+  // 记入「最近观看」（本地记录，供图书页的「最近观看」使用）
+  useEffect(() => {
+    if (!book?.id) return;
+    pushRecent('book', {
+      id: book.id,
+      title: book.bookName || book.title || '未命名',
+      subtitle: book.bookAuthor || book.author,
+      cover: book.bookImg || book.cover,
+    });
+  }, [book]);
+
   const toggleFavoriteChapter = async () => {
     if (!currentChapter) return;
     const res = await addFavoriteService({ bookId: Number(bookId), chapterId: currentChapter.id });
@@ -187,80 +204,98 @@ export default function BookReaderPage() {
     else toast.info('当前章节已在收藏中');
   };
 
-  const theme = THEMES[settings.theme];
+  /** 阅读底色：全部由设计令牌派生，不引入写死的底色 */
+  const THEMES = useMemo<Record<ReaderThemeKey, { bg: string; fg: string }>>(
+    () => ({
+      light: { bg: mm.bg, fg: mm.text },
+      sepia: { bg: alpha(mm.warning, 0.18), fg: mm.text },
+      green: { bg: alpha(mm.success, 0.18), fg: mm.text },
+      // 夜间：整块反白，正文与框内控件一起取反，保证对比度
+      dark: { bg: mm.text, fg: mm.bg },
+    }),
+    [mm],
+  );
+
+  const readerTheme = THEMES[settings.theme];
 
   return (
-    <Box
-      sx={{
-        minHeight: 'calc(100vh - 64px)',
-        bgcolor: theme.bg,
-        color: theme.text,
-        borderRadius: 3,
-        overflow: 'hidden',
-      }}
-    >
-      {/* 顶部栏 */}
-      <Box
+    <Box>
+      {/* 顶部工具栏：带描边的方块，滚动时吸附在内容区顶部 */}
+      <Card
         sx={{
           position: 'sticky',
           top: 0,
           zIndex: 5,
-          px: 2,
-          py: 1.5,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1.5,
-          bgcolor: theme.bg,
-          borderBottom: '1px solid rgba(128,128,128,.18)',
+          mb: 3,
+          px: { xs: 1.5, md: 2.5 },
+          py: 1.25,
+          borderRadius: 'var(--mm-radius-lg)',
         }}
       >
-        <Button startIcon={<ArrowBackRoundedIcon />} onClick={() => router.back()} sx={{ color: theme.text }}>
-          返回
-        </Button>
-        <Typography variant="subtitle1" fontWeight={700} sx={{ flex: 1 }} noWrap>
-          {book?.bookName || book?.title || '阅读'}
-        </Typography>
-        <Tooltip title="收藏本章">
-          <span>
-            <IconButton onClick={toggleFavoriteChapter} disabled={!currentChapter} sx={{ color: theme.text }}>
-              <StarBorderRoundedIcon />
+        <Stack direction="row" alignItems="center" spacing={1.25}>
+          <Button variant="outlined" startIcon={<ArrowBackRoundedIcon />} onClick={() => router.back()}>
+            返回
+          </Button>
+          <Typography variant="subtitle1" fontWeight={700} sx={{ flex: 1, minWidth: 0 }} noWrap>
+            {book?.bookName || book?.title || '阅读'}
+          </Typography>
+          <Tooltip title="收藏本章">
+            <span>
+              <IconButton onClick={toggleFavoriteChapter} disabled={!currentChapter} aria-label="收藏本章">
+                <StarBorderRoundedIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="阅读设置">
+            <IconButton onClick={() => setSettingsOpen(true)} aria-label="阅读设置">
+              <SettingsRoundedIcon />
             </IconButton>
-          </span>
-        </Tooltip>
-        <Tooltip title="阅读设置">
-          <IconButton onClick={() => setSettingsOpen(true)} sx={{ color: theme.text }}>
-            <SettingsRoundedIcon />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="目录">
-          <IconButton onClick={() => setSidebarOpen(true)} sx={{ color: theme.text }}>
-            <MenuBookRoundedIcon />
-          </IconButton>
-        </Tooltip>
-      </Box>
+          </Tooltip>
+          <Tooltip title="目录">
+            <IconButton onClick={() => setSidebarOpen(true)} aria-label="目录">
+              <MenuBookRoundedIcon />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      </Card>
 
-      {/* 内容 */}
+      {/* 正文：灰底「纸面」+ 描边，保持阅读区安静 */}
       <Box
         ref={contentRef}
-        sx={{ px: { xs: 2, md: 4 }, py: 4, mx: 'auto', maxWidth: settings.width }}
+        sx={{
+          mx: 'auto',
+          width: '100%',
+          maxWidth: settings.width,
+          px: { xs: 2.5, sm: 4, md: 5.5 },
+          py: { xs: 3, md: 4.5 },
+          borderRadius: 'var(--mm-radius-xl)',
+          bgcolor: readerTheme.bg,
+          color: readerTheme.fg,
+          boxShadow: 'var(--mm-sunken-sm)',
+          // 夜间模式下整块取反，框内的文字与控件必须一起跟随，否则会黑底黑字
+          '& .MuiTypography-root': { color: 'inherit' },
+          '& .MuiDivider-root': { borderColor: 'currentColor', opacity: 0.3 },
+          '& .MuiButton-outlined': { color: 'inherit', boxShadow: '0 0 0 2px currentColor' },
+          '& .MuiButton-outlined.Mui-disabled': { color: 'inherit', opacity: 0.4 },
+        }}
       >
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1.5} sx={{ mb: 3 }}>
           <Button
+            variant="outlined"
             disabled={!prevChapter}
             startIcon={<ArrowBackIosNewRoundedIcon />}
             onClick={() => prevChapter && loadChapter(prevChapter)}
-            sx={{ color: theme.text }}
           >
             上一章
           </Button>
-          <Typography variant="h6" fontWeight={700} sx={{ textAlign: 'center', flex: 1 }} noWrap>
+          <Typography variant="h6" fontWeight={700} sx={{ textAlign: 'center', flex: 1, minWidth: 0 }} noWrap>
             {currentChapter?.chapterTitle || '加载中…'}
           </Typography>
           <Button
+            variant="outlined"
             disabled={!nextChapter}
             endIcon={<ArrowForwardIosRoundedIcon />}
             onClick={() => nextChapter && loadChapter(nextChapter)}
-            sx={{ color: theme.text }}
           >
             下一章
           </Button>
@@ -272,7 +307,7 @@ export default function BookReaderPage() {
             <Typography color="text.secondary">正在加载章节内容…</Typography>
           </Stack>
         ) : paragraphs.length === 0 ? (
-          <Stack alignItems="center" spacing={1} sx={{ py: 8, opacity: 0.6 }}>
+          <Stack alignItems="center" spacing={1} sx={{ py: 8, color: 'var(--mm-text-3)' }}>
             <MenuBookRoundedIcon sx={{ fontSize: 56 }} />
             <Typography>暂无内容</Typography>
           </Stack>
@@ -287,21 +322,30 @@ export default function BookReaderPage() {
                   lineHeight: settings.lineHeight,
                   mb: 2,
                   textIndent: '2em',
-                  color: theme.text,
                 }}
               >
                 {p}
               </Typography>
             ))}
             <Divider sx={{ my: 4 }} />
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Button disabled={!prevChapter} startIcon={<ArrowBackIosNewRoundedIcon />} onClick={() => prevChapter && loadChapter(prevChapter)} sx={{ color: theme.text }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1.5}>
+              <Button
+                variant="outlined"
+                disabled={!prevChapter}
+                startIcon={<ArrowBackIosNewRoundedIcon />}
+                onClick={() => prevChapter && loadChapter(prevChapter)}
+              >
                 上一章
               </Button>
-              <Typography variant="body2" sx={{ opacity: 0.7 }}>
+              <Typography variant="body2" color="text.secondary" noWrap>
                 {currentChapter?.chapterTitle}
               </Typography>
-              <Button disabled={!nextChapter} endIcon={<ArrowForwardIosRoundedIcon />} onClick={() => nextChapter && loadChapter(nextChapter)} sx={{ color: theme.text }}>
+              <Button
+                variant="outlined"
+                disabled={!nextChapter}
+                endIcon={<ArrowForwardIosRoundedIcon />}
+                onClick={() => nextChapter && loadChapter(nextChapter)}
+              >
                 下一章
               </Button>
             </Stack>
@@ -310,13 +354,18 @@ export default function BookReaderPage() {
       </Box>
 
       {/* 目录抽屉 */}
-      <Drawer anchor="left" open={sidebarOpen} onClose={() => setSidebarOpen(false)} slotProps={{ paper: { sx: { width: 340 } } }}>
+      <Drawer
+        anchor="left"
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        slotProps={{ paper: { sx: { width: 340, bgcolor: 'var(--mm-bg)' } } }}
+      >
         <Box sx={{ p: 2 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
             <Typography variant="h6" fontWeight={700}>
               目录
             </Typography>
-            <IconButton onClick={() => setSidebarOpen(false)}>
+            <IconButton onClick={() => setSidebarOpen(false)} aria-label="关闭目录">
               <CloseRoundedIcon />
             </IconButton>
           </Stack>
@@ -337,13 +386,13 @@ export default function BookReaderPage() {
             }}
           />
         </Box>
-        <List sx={{ px: 1.5 }}>
+        <List sx={{ px: 1.5, pb: 2 }}>
           {filteredChapters.map((c) => (
             <ListItemButton
               key={String(c.id)}
               selected={c.id === currentChapter?.id}
               onClick={() => loadChapter(c)}
-              sx={{ borderRadius: 2.5, mb: 0.5 }}
+              sx={{ borderRadius: 'var(--mm-radius)', mb: 0.5 }}
             >
               <ListItemText
                 primary={`第 ${c.chapterNumber ?? ''} 章 · ${c.chapterTitle ?? ''}`}
@@ -355,7 +404,12 @@ export default function BookReaderPage() {
       </Drawer>
 
       {/* 设置抽屉 */}
-      <Drawer anchor="right" open={settingsOpen} onClose={() => setSettingsOpen(false)} slotProps={{ paper: { sx: { width: 320, p: 3 } } }}>
+      <Drawer
+        anchor="right"
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        slotProps={{ paper: { sx: { width: 320, p: 3, bgcolor: 'var(--mm-bg)' } } }}
+      >
         <Typography variant="h6" fontWeight={700} sx={{ mb: 3 }}>
           阅读设置
         </Typography>
@@ -391,21 +445,24 @@ export default function BookReaderPage() {
           </Box>
           <Box>
             <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
-              主题
+              阅读底色
             </Typography>
             <Stack direction="row" spacing={1.5}>
-              {(Object.keys(THEMES) as Array<ReaderSettings['theme']>).map((key) => (
-                <Tooltip key={key} title={THEMES[key].label}>
+              {(Object.keys(THEMES) as ReaderThemeKey[]).map((key) => (
+                <Tooltip key={key} title={THEME_LABELS[key]}>
                   <Button
                     onClick={() => saveSettings({ theme: key })}
+                    aria-pressed={settings.theme === key}
                     sx={{
                       minWidth: 56,
                       height: 56,
+                      p: 0,
+                      // 色块里的字跟随该底色自身的文字色，夜间块才不会黑字压黑底
+                      color: THEMES[key].fg,
                       bgcolor: THEMES[key].bg,
-                      color: THEMES[key].text,
-                      border: 2,
-                      borderColor: settings.theme === key ? 'primary.main' : 'transparent',
-                      '&:hover': { bgcolor: THEMES[key].bg },
+                      boxShadow: settings.theme === key ? '0 0 0 4px var(--mm-accent)' : 'var(--mm-raised-sm)',
+                      '&:hover': { bgcolor: THEMES[key].bg, color: THEMES[key].fg, boxShadow: '0 0 0 4px var(--mm-accent)' },
+                      '&:active': { bgcolor: THEMES[key].bg, boxShadow: 'none' },
                     }}
                   >
                     Aa

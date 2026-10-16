@@ -273,8 +273,8 @@ export default function KugouPanel() {
 
   return (
     <Box>
-      <Card sx={{ p: 2.5, mb: 3 }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
+      <Card sx={{ p: 2.5, mb: 3.5, borderRadius: 'var(--mm-radius-lg)' }}>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2.5 }}>
           <Tab value="search" label="在线搜索" />
           <Tab value="rank" label="排行榜" />
         </Tabs>
@@ -308,20 +308,20 @@ export default function KugouPanel() {
         songs.length === 0 ? (
           <EmptyState icon={<SearchRoundedIcon sx={{ fontSize: 64 }} />} title="搜索酷狗音乐" description="输入关键词开始搜索" />
         ) : (
-          <Card sx={{ borderRadius: 4 }}>
+          <Card sx={{ borderRadius: 'var(--mm-radius-lg)' }}>
             <List>{songs.map(renderSong)}</List>
           </Card>
         )
       ) : (
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
-          <Card sx={{ borderRadius: 4, p: 1.5, minWidth: 240, height: 'fit-content' }}>
+          <Card sx={{ borderRadius: 'var(--mm-radius-lg)', p: 1.5, minWidth: 240, height: 'fit-content' }}>
             <List>
               {ranks.map((r) => (
                 <ListItemButton
                   key={r.rankId}
                   selected={activeRank?.rankId === r.rankId}
                   onClick={() => loadRank(r)}
-                  sx={{ borderRadius: 2.5 }}
+                  sx={{ borderRadius: 'var(--mm-radius-sm)' }}
                 >
                   <ListItemText primary={r.rankName} />
                 </ListItemButton>
@@ -332,7 +332,7 @@ export default function KugouPanel() {
             {rankSongs.length === 0 ? (
               <EmptyState icon={<MusicNoteRoundedIcon sx={{ fontSize: 64 }} />} title="选择一个榜单查看歌曲" />
             ) : (
-              <Card sx={{ borderRadius: 4 }}>
+              <Card sx={{ borderRadius: 'var(--mm-radius-lg)' }}>
                 <CardContent>
                   <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
                     {activeRank?.rankName ?? '榜单歌曲'}
@@ -348,7 +348,18 @@ export default function KugouPanel() {
       <Dialog open={lyricDialog.open} onClose={() => setLyricDialog((s) => ({ ...s, open: false }))} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 700 }}>{lyricDialog.title}</DialogTitle>
         <DialogContent>
-          <Box sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: 13, maxHeight: 400, overflowY: 'auto' }}>
+          <Box
+            sx={{
+              whiteSpace: 'pre-wrap',
+              fontSize: 13,
+              maxHeight: 400,
+              overflowY: 'auto',
+              p: 2.5,
+              borderRadius: 'var(--mm-radius)',
+              bgcolor: 'var(--mm-sunken)',
+              boxShadow: 'var(--mm-sunken-sm)',
+            }}
+          >
             {lyricDialog.text}
           </Box>
         </DialogContent>

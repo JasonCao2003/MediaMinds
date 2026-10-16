@@ -65,3 +65,41 @@ UNLOCK TABLES;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2025-05-12 19:23:51
+
+--
+-- Table structure for table `user_activity`
+-- 媒体消费时长统计：按「用户 × 日期 × 媒体类型」聚合，每次上报累加
+--
+
+DROP TABLE IF EXISTS `user_activity`;
+CREATE TABLE `user_activity` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `user_id` varchar(20) NOT NULL COMMENT '用户ID',
+  `stat_date` date NOT NULL COMMENT '统计日期',
+  `media_type` varchar(16) NOT NULL COMMENT '媒体类型：book / music / video',
+  `duration_seconds` int NOT NULL DEFAULT '0' COMMENT '累计消费时长（秒）',
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_date_type` (`user_id`,`stat_date`,`media_type`),
+  KEY `idx_user_date` (`user_id`,`stat_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+--
+-- Table structure for table `user_annual_report`
+-- AI 生成的年度报告：按「用户 × 年份」唯一，重新生成时覆盖（updated_at 即最近生成时间）
+--
+
+DROP TABLE IF EXISTS `user_annual_report`;
+CREATE TABLE `user_annual_report` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `user_id` varchar(20) NOT NULL COMMENT '用户ID',
+  `report_year` int NOT NULL COMMENT '报告年份',
+  `engine` varchar(32) NOT NULL COMMENT '生成引擎：langchain4j / rule',
+  `model` varchar(64) DEFAULT NULL COMMENT '模型名',
+  `headline` text COMMENT '总评一句话',
+  `sections` longtext NOT NULL COMMENT '板块列表（JSON：[{heading,body}]）',
+  `fallback_reason` varchar(500) DEFAULT NULL COMMENT '降级原因（仅在规则式报告时出现）',
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最近生成时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_year` (`user_id`,`report_year`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI 年度报告';

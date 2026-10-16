@@ -13,6 +13,12 @@
 ## [Unreleased]
 
 ### Added
+- **个人时长统计与 AI 年度报告**：
+  - **数据层**：新增 `user_db.user_activity` 表（按「用户 × 日期 × 媒体类型」聚合，唯一键 `uk_user_date_type`，每次上报累加）。
+  - **接口（auth-service）**：`POST /v1/auth/activity/report` 累加时长；`GET /v1/auth/activity/summary?days=` 返回今日/本周/本月/本年/累计 + 每日明细 + 连续使用天数 + 可选年份；`GET /v1/auth/activity/annual?year=` 返回年度聚合（月度分布、最活跃的月与日、年度最长连续）。
+  - **统计口径**：只统计「真的在消费内容」的时间——阅读器页面可见、视频播放中、音乐播放中；暂停、切走标签页、关闭页面都不计。前端 `useActivityTracker` 每 30 秒上报一次增量，页面隐藏/卸载时补报，上报失败会把秒数放回去下次再报。
+  - **AI 年度报告（agent-service）**：新增 `POST /v1/agent/report`。前端把「年度时长 + 使用习惯 + 收藏/观看历史里的内容清单」组装后交给大模型，由 DeepSeek 撰写含「总评 / 阅读 / 观影 / 音乐 / 习惯 / 寄语」六个板块的回顾；**未配置大模型或调用失败时回退规则式报告**，与智能入库 Agent 的降级链路一致。输出格式用 `【标题】` 朴素标记而非 JSON，解析失败时整体作为一段展示，不丢内容。
+  - **前端**：新增「时长统计」页（`/content/stats`）：范围切换（今日/本周/本月/本年/累计）、三类占比条、近 30 天堆叠柱状图（**纯 CSS 绘制，未引入图表库**）、使用习惯卡片，以及按需触发的年度报告生成与板块展示。
 - **Next.js 前端（`MediaMinds_next/`）**：基于 Next.js 15 App Router + TypeScript + Material UI v6（Material Design 3）全新前端，覆盖登录/注册、用户端与管理员端全部页面。
   - Material Design 3 主题体系（明暗双主题、品牌色令牌、统一动效与无障碍规范）。
   - Zustand 状态管理、Axios 请求层（拦截器/token/通知）、STOMP over SockJS 实时通知。
@@ -32,6 +38,24 @@
 - **豆瓣书源（`book-service`）**：新增 `/v1/book/douban/search`、`/v1/book/douban/{id}`、`/v1/book/douban/import`，抓取豆瓣图书搜索结果与 rexxar 详情接口，仅入库元信息（书名/作者/封面/简介/出版信息），不下载正文。Agent 的图书来源已切换为豆瓣。
 
 ### Changed
+- **图书 / 视频 / 音乐三页统一新增「最近」视图**：
+  - 筛选区统一为 **[最近] [全部] [收藏]** 三个按钮；选中「最近」时再展开子切换 **[最近添加 | 最近观看]**。图书页默认停在「最近」。
+  - **最近添加** 复用各服务的 `/list`（后端本就按 `create_time` 倒序），只取一页 24 条、不显示分页；音乐服务的歌曲列表原本**没有任何排序**，已补上 `create_time` 倒序。
+  - **最近观看** 用 **localStorage** 记录（`lib/recent.ts`）：图书与音乐后端都没有阅读 / 播放记录表，这里存一份**卡片快照**，渲染最近列表时不需要按 id 逐个回查接口（避免 N+1 请求）。阅读器打开书籍、播放器与音频引擎开始播放时写入；同一条会自动去重并置顶。代价是换浏览器或清缓存会丢。
+  - **封面兜底** 新增 `components/common/CoverImage.tsx`：空串、纯空格、以及**加载失败的失效链接**都回退到默认封面（原先只写 `src={cover || '/cover.jpg'}`，兜不住死链）。三个页面与阅读器、播放页统一改用它。
+- **视频页去掉搜索维度筛选**：移除搜索框前的「片名 / 导演 / 主演」切换，改为单一模糊搜索；后端 `searchMovieList` 同步扩展为同时匹配 `name` / `directed_by` / `actor` / `abs` / `info`。
+- **图书页模糊搜索补上作者**：占位符写的是「输入图书名或作者名」，但后端只匹配了书名与简介，现已把 `book_author` 纳入模糊匹配。
+- **音乐页移除「歌手」浏览功能**：删除歌手 Tab 与歌手卡片网格（含「点歌手播放全部」）；但**保留** `singerNameById` 名字解析链路——歌曲表只有 `singer_id`，`SongRow` 需要展示歌手名，删掉会导致列表全部显示「未知歌手」。
+- **前端整体改版为 Brutalism（粗野主义）设计系统**，替换原「Midnight」深色主题：
+  - **反设计取向**：圆角一律 0px、**取消全部阴影**（层次改由 3px 实心描边表达）、**禁止过渡动画**（状态瞬时切换）、背景铺 28px 可见网格线。色彩改用纯原色（蓝 `#0000FF` / 红 `#FF0000` / 黄 `#FFFF00`）+ 黑白。
+  - **双主题 + 右上角切换**：浅色（白底黑框）与深色（黑底白框），由 `<html data-theme>` 驱动一套 CSS 变量。主题持久化改用 **cookie**，根布局在 SSR 阶段读取并直接写入 `data-theme`，因此首帧即正确主题——既不需要阻塞脚本，也没有水合不一致。
+  - 深色模式下纯原色不可读（`#0000FF` 在黑底上对比度仅 2.4:1），因此**文字用强调色单独给了一组提亮变体**，填充色仍用纯原色。
+  - 历史遗留的 `--mm-raised-*` / `--mm-sunken-*` 令牌**语义已从「阴影」改为「描边环」**（用 `box-shadow` 画环，不占盒模型、无布局位移），因此页面无需重写即可整体换风格。
+  - **字体更换为 Space Grotesk**（Brutalism 官方搭配 · Kinetic Brutalism），中文回落系统黑体，移除 ZSFT CDN 依赖。
+  - 侧边导航由纯图标轨道改为**带文字的实心面板**，**选中项整体反白** + 方块指示器；页面标题/副标题改由 `AppShell` 统一渲染，废弃 `PageHeader` 组件。
+  - MUI 主题集中覆盖 30+ 组件（Card / Button / IconButton / TextField / Select / Tabs / ToggleButton / Chip / Avatar / Dialog / Menu / Tooltip / Drawer / Slider / Switch / LinearProgress / Skeleton / Table / Accordion / Alert / ListItemButton …），页面内不再手写阴影与颜色。
+  - 新增 `MediaMinds_next/DESIGN.md` 设计规范（令牌表、元素语义、无障碍红线、反模式）。
+  - 无障碍：全局 `:focus-visible` 焦点环、正文对比度 ≥ 4.5:1、点击目标 ≥ 44px、状态不单靠颜色传达（选中项另有反白/方块指示/更粗描边）；修复阅读器「夜间」底色黑底黑字的对比度缺陷（`THEMES[key].fg`）。
 - **前端取消「管理端」概念，统一为单一角色**：删除 `/admin` 路由组与 `AdminLayout`，13 个内容管理页迁移到 `/content/manage/*`（控制面板 / 用户 / 图书 / 音乐 / 视频），导航合并进唯一的 `UserLayout`（管理分组悬停弹出子菜单）；`api/admin.ts` → `api/manage.ts`、`components/admin/` → `components/manage/`；移除 `isAdmin()`、`UserInfo.role`、个人页「管理员/普通用户」标签、用户管理页的角色筛选/切换按钮；`GlobalMusicPlayer` 不再按角色隐藏。
 - **后端彻底移除角色体系**：删除 4 个服务的 `RoleCheck` 注解类与 37 处 `@RoleCheck` 注解；`Interceptor` 不再读取 `X-Role`；网关不再透传 `X-Role`；JWT 不再写入 `role` claim；移除 `/v1/auth/user/updateRole` 接口、`UserService.updateUserRole`、`UserMapper.updateUserRole`、`User.role` 与 `UserDTO.role`；`user` 表移除 `role` 列（建表 SQL 同步更新）；影视评论删除权限由「作者或管理员」收敛为「仅作者本人」。
 - 前端技术栈由 Vue 3 + Element Plus 迁移至 Next.js 15 + Material UI，端口统一为 5173。
@@ -53,6 +77,16 @@
 - **移除内容管理页与图表依赖**：删除整个 `/content/manage`（控制面板 / 用户 / 图书 / 音乐 / 视频共 12 个页面）、`components/manage/`（CrudManager、UploadAction）、`components/common/DataTable.tsx` 与 `EChart.tsx`；从 `package.json` 移除 `echarts` / `echarts-for-react`（约 54 MB 依赖、单页编译 3400+ 模块）；`api/manage.ts` 精简为 `api/stats.ts`（仅保留首页内容统计），`api/user.ts` 移除用户管理接口。左侧导航收敛为 **首页 / 图书浏览 / 视频浏览 / 音乐浏览 / 智能入库 / 个人信息**。
 
 ### Fixed
+- **修复影视观看进度的写入 bug**：`watchProgress` 的约定是 0-1 的比例，但播放页曾把 `video.currentTime`（秒数）直接传上去，导致库中出现 `watch_progress = 23.00` 这类越界值；现改为传比例，读取时兼容历史数据（>1 视为秒数，≤1 视为比例并在拿到 `duration` 后换算定位）。
+- **根治「服务启动即崩」的坏字节码问题**：`mvn install`（不带 `clean`）后，部分 Lombok `@Data` 类会落盘为
+  `Code` 属性长度为 0 的坏字节码，JVM 直接拒绝加载并抛
+  `java.lang.ClassFormatError: Invalid method Code length 0`。本次共 9 个类受影响
+  （`agent-service` 5 个：`Config.AgentLlmProperties`、`DTO.AgentChatRequest/AgentImportRequest/AgentQueryRequest/Candidate`；
+  `gateway-service` 1 个：`DTO.Result`；`demo-service` 3 个：`DTO.Result`、`DTO.User`、`Pojo.Demo`），
+  表现为 `agent-service`(9011) 与 `gateway-service`(8080) 启动失败，而 `start-all.sh` 只报「等待端口超时」。
+  - 父 pom 的 `maven-compiler-plugin` 关闭 `useIncrementalCompilation`，并显式声明 `annotationProcessorPaths`（JDK 17+ / MCP 3.12+ 推荐做法）。
+  - `deploy/rebuild.sh` 后端**默认 `mvn clean install`**（新增 `--incremental` 才跳过 clean）。
+  - 新增 `deploy/tools/CheckClassFiles.java`：构建后用**真实类加载器**逐个加载 `target/classes` 做完整性自检，并在 `rebuild.sh` 中自动执行。
 - 修正 Next.js 主题阴影层级不足（`theme.shadows` 需 25 级）导致的 MUI `elevation` 报错。
 - 修正请求层“重复请求取消”逻辑误取消并发相同请求的问题（影响管理端仪表盘统计）。
 - 修正 `<button>` 嵌套 `<button>` 导致的 React hydration 错误（图书/视频卡片、文档文件夹项），并优化页面渲染性能。

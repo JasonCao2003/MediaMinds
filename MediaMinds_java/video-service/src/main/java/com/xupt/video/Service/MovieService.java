@@ -154,7 +154,12 @@ public class MovieService {
         try {
             Page<Movie> pageInfo = new Page<>(page, size);
             LambdaQueryWrapper<Movie> queryWrapper = new LambdaQueryWrapper<>();
+            // 去掉「片名 / 导演 / 主演」筛选按钮后，模糊搜索必须同时覆盖这三个字段
             queryWrapper.like(Movie::getName, keyword)
+                    .or()
+                    .like(Movie::getDirectedBy, keyword)
+                    .or()
+                    .like(Movie::getActor, keyword)
                     .or()
                     .like(Movie::getAbs, keyword)
                     .or()

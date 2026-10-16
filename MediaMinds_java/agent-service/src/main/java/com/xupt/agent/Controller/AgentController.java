@@ -4,8 +4,10 @@ import com.xupt.agent.Config.AgentLlmProperties;
 import com.xupt.agent.DTO.AgentChatRequest;
 import com.xupt.agent.DTO.AgentImportRequest;
 import com.xupt.agent.DTO.AgentQueryRequest;
+import com.xupt.agent.DTO.AnnualReportRequest;
 import com.xupt.agent.DTO.Result;
 import com.xupt.agent.Service.AgentService;
+import com.xupt.agent.Service.AnnualReportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,10 +32,14 @@ import java.util.Map;
 public class AgentController {
 
     private final AgentService agentService;
+    private final AnnualReportService annualReportService;
     private final AgentLlmProperties llmProperties;
 
-    public AgentController(AgentService agentService, AgentLlmProperties llmProperties) {
+    public AgentController(AgentService agentService,
+                           AnnualReportService annualReportService,
+                           AgentLlmProperties llmProperties) {
         this.agentService = agentService;
+        this.annualReportService = annualReportService;
         this.llmProperties = llmProperties;
     }
 
@@ -80,6 +86,16 @@ public class AgentController {
             return Result.error(400, "请先选择要入库的条目");
         }
         return Result.success(agentService.importItems(request.getItems()));
+    }
+
+    @Operation(summary = "生成年度报告",
+            description = "根据用户一年的消费时长与内容清单，由大模型撰写年度回顾；未配置大模型时回退规则式报告")
+    @PostMapping("/report")
+    public Result<?> report(@RequestBody AnnualReportRequest request) {
+        if (request == null) {
+            return Result.error(400, "缺少报告数据");
+        }
+        return Result.success(annualReportService.generate(request));
     }
 
     @Operation(summary = "Agent 运行状态", description = "查看当前是否启用了大模型以及模型信息")
