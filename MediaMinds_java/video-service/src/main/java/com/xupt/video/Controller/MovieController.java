@@ -28,8 +28,11 @@ public class MovieController {
     @GetMapping("/list")
     public Result<Page<Movie>> getMovieList(
             @Parameter(description = "当前页码，默认1", example = "1") @RequestParam(defaultValue = "1") int page,
-            @Parameter(description = "每页记录数，默认10", example = "10") @RequestParam(defaultValue = "10") int size) {
-        return movieService.getMovieList(page, size);
+            @Parameter(description = "每页记录数，默认10", example = "10") @RequestParam(defaultValue = "10") int size,
+            @Parameter(description = "排序字段：createTime / name / rate / showTime")
+            @RequestParam(required = false) String sortField,
+            @Parameter(description = "排序方向：asc / desc") @RequestParam(required = false) String sortOrder) {
+        return movieService.getMovieList(page, size, sortField, sortOrder);
     }
 
     // 模糊查询电影信息列表（分页）
@@ -38,8 +41,11 @@ public class MovieController {
     public Result<Page<Movie>> searchMovieList(
             @Parameter(description = "当前页码，默认1", example = "1") @RequestParam(defaultValue = "1") int page,
             @Parameter(description = "每页记录数，默认10", example = "10") @RequestParam(defaultValue = "10") int size,
-            @Parameter(description = "查询关键字", required = true) @RequestParam String keyword) {
-        return movieService.searchMovieList(page, size, keyword);
+            @Parameter(description = "查询关键字", required = true) @RequestParam String keyword,
+            @Parameter(description = "排序字段：createTime / name / rate / showTime")
+            @RequestParam(required = false) String sortField,
+            @Parameter(description = "排序方向：asc / desc") @RequestParam(required = false) String sortOrder) {
+        return movieService.searchMovieList(page, size, keyword, sortField, sortOrder);
     }
 
     // 根据演员模糊查找

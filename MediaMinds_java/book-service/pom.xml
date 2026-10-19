@@ -77,6 +77,16 @@
             <artifactId>minio</artifactId>
             <version>8.5.12</version>
         </dependency>
+
+        <!--
+          Apache PDFBox（Apache-2.0）：PDF 元数据抽取 + 首页渲染成封面。
+          写 PDF 解析器不现实，这个依赖是必要的。
+        -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.3</version>
+        </dependency>
     </dependencies>
 
     <build>

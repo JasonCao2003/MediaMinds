@@ -40,9 +40,14 @@ export const updateMovieVideoService = (movieId: number | string, videoFile: Fil
   );
 };
 
-export const searchMovieService = (keyword: string, page = 1, size = 10) =>
+export const searchMovieService = (
+  keyword: string,
+  page = 1,
+  size = 10,
+  params: Record<string, unknown> = {},
+) =>
   request.get<ApiResult<PageResult<Movie>>>('/v1/video/movie/search', {
-    params: { keyword, page, size },
+    params: { keyword, page, size, ...params },
   });
 
 export const searchMovieByDirectorService = (keyword: string, page = 1, size = 10) =>
@@ -67,20 +72,28 @@ export const getCategoryByIdService = (id: number | string) =>
   request.get(`/v1/video/category/${id}`);
 
 export const addCategoryService = (data: Record<string, unknown>) =>
-  request.post('/v1/video/category', data);
+  request.post<ApiResult<void>>('/v1/video/category', data);
 
 export const updateCategoryService = (data: Record<string, unknown>) =>
-  request.put('/v1/video/category', data);
+  request.put<ApiResult<void>>('/v1/video/category', data);
 
 export const deleteCategoryService = (id: number | string) =>
-  request.delete(`/v1/video/category/${id}`);
+  request.delete<ApiResult<void>>(`/v1/video/category/${id}`);
 
-export const getMoviesByCategoryIdService = (id: number | string, page = 1, size = 10) =>
-  request.get<ApiResult<PageResult<Movie>>>(`/v1/video/category/${id}/movies`, { params: { page, size } });
+export const getMoviesByCategoryIdService = (
+  id: number | string,
+  page = 1,
+  size = 10,
+  params: Record<string, unknown> = {},
+) =>
+  request.get<ApiResult<PageResult<Movie>>>(`/v1/video/category/${id}/movies`, {
+    params: { page, size, ...params },
+  });
 
 // ================== 标签管理 ==================
 
-export const getAllTagsService = () => request.get('/v1/video/tag/all');
+export const getAllTagsService = () =>
+  request.get<ApiResult<Record<string, unknown>[]>>('/v1/video/tag/all');
 
 export const getTagListService = (page = 1, size = 10) =>
   request.get('/v1/video/tag/list', { params: { page, size } });
@@ -89,13 +102,13 @@ export const getTagByIdService = (id: number | string) =>
   request.get(`/v1/video/tag/${id}`);
 
 export const addTagService = (data: Record<string, unknown>) =>
-  request.post('/v1/video/tag', data);
+  request.post<ApiResult<void>>('/v1/video/tag', data);
 
 export const updateTagService = (data: Record<string, unknown>) =>
-  request.put('/v1/video/tag', data);
+  request.put<ApiResult<void>>('/v1/video/tag', data);
 
 export const deleteTagService = (id: number | string) =>
-  request.delete(`/v1/video/tag/${id}`);
+  request.delete<ApiResult<void>>(`/v1/video/tag/${id}`);
 
 export const getMoviesByTagIdService = (id: number | string, page = 1, size = 10) =>
   request.get(`/v1/video/tag/${id}/movies`, { params: { page, size } });
@@ -160,3 +173,35 @@ export const deleteWatchRecordService = (movieId: number | string) =>
   request.delete(`/v1/video/history/${movieId}`);
 
 export const clearWatchHistoryService = () => request.delete('/v1/video/history/clear');
+
+// ================== TMDB 在线影视 ==================
+
+const TMDB_PREFIX = '/v1/video/tmdb';
+
+/** 在线搜索维度：片名 / 演员 / 导演 */
+export type TmdbDimension = 'title' | 'actor' | 'director';
+
+/**
+ * 按片名搜索 TMDB 影片。
+ * 返回 `data.results`（TMDB 原始数组）与 `data.imageBase` / `data.posterSize`（拼海报用）。
+ */
+export const searchTmdbService = (query: string, page = 1) =>
+  request.get<ApiResult<unknown>>(`${TMDB_PREFIX}/search`, { params: { query, page } });
+
+/** 搜索 TMDB 人物（演员 / 导演），返回 `data.results` */
+export const searchTmdbPersonService = (query: string, page = 1) =>
+  request.get<ApiResult<unknown>>(`${TMDB_PREFIX}/person/search`, { params: { query, page } });
+
+/** 按人物筛选其参演（actor）或执导（director）的影片 */
+export const getTmdbPersonMoviesService = (
+  personId: number | string,
+  role: 'actor' | 'director' = 'actor',
+  page = 1,
+) =>
+  request.get<ApiResult<unknown>>(`${TMDB_PREFIX}/person/movies`, {
+    params: { personId, role, page },
+  });
+
+/** 将 TMDB 影片导入本地影视库 */
+export const importTmdbMovieService = (tmdbId: number | string) =>
+  request.post<ApiResult<unknown>>(`${TMDB_PREFIX}/import`, null, { params: { tmdbId } });

@@ -9,6 +9,7 @@ import com.xupt.book.Mapper.SongMapper;
 import com.xupt.book.Pojo.Collect;
 import com.xupt.book.Pojo.Song;
 import com.xupt.book.Service.CollectService;
+import com.xupt.book.Service.SingerNameResolver;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +25,8 @@ public class CollectServiceImpl implements CollectService {
     private CollectMapper collectMapper;
     @Resource
     private SongMapper songMapper;
+    @Resource
+    private SingerNameResolver singerNameResolver;
 
     @Override
     public boolean addCollection(Collect collect) {
@@ -113,6 +116,7 @@ public class CollectServiceImpl implements CollectService {
         songPage.setSize(collectPage.getSize());
         songPage.setCurrent(collectPage.getCurrent());
 
+        singerNameResolver.fill(songPage);
         return songPage;
     }
 

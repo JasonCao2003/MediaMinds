@@ -8,6 +8,8 @@ import com.xupt.book.Pojo.Book;
 import com.xupt.book.Pojo.BookType;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -39,7 +41,7 @@ public class DoubanService {
     // ============================================================
 
     public Map<String, Object> search(String query, int page) {
-        List<Map<String, Object>> raw = client.search(query);
+        List<Map<String, Object>> raw = client.search(query, Math.max(0, (page - 1) * 20));
         List<Map<String, Object>> results = new ArrayList<>();
         for (Map<String, Object> item : raw) {
             results.add(normalize(item));
@@ -83,16 +85,56 @@ public class DoubanService {
     // 导入
     // ============================================================
 
-    public Map<String, Object> importBook(long doubanId) {
+    /**
+     * 从豆瓣详情构建 {@link Book} 实体，**不落库**。
+     *
+     * <p>抽出来是为了让「只导入元信息」与「导入元信息 + 用户上传的文件」两条路径
+     * 共用同一份字段映射。
+     */
+    public Book buildBook(long doubanId) {
         JsonNode detail = client.detail(doubanId);
         String title = detail.path("title").asText("");
         if (title.isEmpty()) {
             throw new IllegalArgumentException("豆瓣书籍标题为空，无法导入");
         }
-        String bookName = truncate(title, 100);
+
+        Book book = new Book();
+        book.setBookName(truncate(title, 100));
+        // book_author 已从 varchar(20) 扩到 255
+        book.setBookAuthor(blankToNull(truncate(joinAuthors(detail), 255)));
+        book.setTypeId(ensureType(DEFAULT_TYPE));
+        book.setBookImg(blankToNull(pickCover(detail)));
+        book.setBookDetails(buildDetails(detail));
+        book.setChapterCount(0);
+        book.setSource(SOURCE);
+
+        book.setPublisher(blankToNull(truncate(firstOf(detail.path("press")), 255)));
+        book.setPublishedDate(parseDate(firstOf(detail.path("pubdate"))));
+        book.setLanguage(blankToNull(truncate(firstOf(detail.path("language")), 16)));
+
+        String isbn = firstOf(detail.path("isbn")).replaceAll("[^0-9Xx]", "");
+        if (isbn.length() == 13) {
+            book.setIsbn13(isbn);
+        } else if (isbn.length() == 10) {
+            book.setIsbn10(isbn);
+        }
+
+        double rating = detail.path("rating").path("value").asDouble(0);
+        if (rating > 0) {
+            book.setRating(BigDecimal.valueOf(rating));
+        }
+        int ratingCount = detail.path("rating").path("count").asInt(0);
+        if (ratingCount > 0) {
+            book.setReviewCount(ratingCount);
+        }
+        return book;
+    }
+
+    public Map<String, Object> importBook(long doubanId) {
+        Book book = buildBook(doubanId);
 
         Book existing = bookMapper.selectOne(
-                new LambdaQueryWrapper<Book>().eq(Book::getBookName, bookName).last("LIMIT 1"));
+                new LambdaQueryWrapper<Book>().eq(Book::getBookName, book.getBookName()).last("LIMIT 1"));
         if (existing != null) {
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("existed", true);
@@ -100,14 +142,6 @@ public class DoubanService {
             return result;
         }
 
-        Book book = new Book();
-        book.setBookName(bookName);
-        book.setBookAuthor(truncate(joinAuthors(detail), 20));
-        book.setTypeId(ensureType(DEFAULT_TYPE));
-        book.setBookImg(pickCover(detail));
-        book.setBookDetails(buildDetails(detail));
-        book.setChapterCount(0);
-        book.setSource(SOURCE);
         book.setCreateTime(LocalDateTime.now());
         book.setUpdateTime(LocalDateTime.now());
         bookMapper.insert(book);
@@ -116,6 +150,34 @@ public class DoubanService {
         result.put("existed", false);
         result.put("book", book);
         return result;
+    }
+
+    /** "2021-3-5" / "2021-03" / "2021" → LocalDate；认不出返回 null */
+    private static LocalDate parseDate(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String value = raw.trim().replace('/', '-');
+        try {
+            String[] parts = value.split("-");
+            if (parts.length >= 3) {
+                return LocalDate.of(Integer.parseInt(parts[0].trim()),
+                        Integer.parseInt(parts[1].trim()), Integer.parseInt(parts[2].trim()));
+            }
+            if (parts.length == 2) {
+                return LocalDate.of(Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim()), 1);
+            }
+            if (parts.length == 1) {
+                return LocalDate.of(Integer.parseInt(parts[0].trim()), 1, 1);
+            }
+        } catch (Exception ignored) {
+            // 豆瓣的出版日期格式很随意，认不出就留空
+        }
+        return null;
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private String joinAuthors(JsonNode detail) {

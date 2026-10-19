@@ -19,4 +19,8 @@ public interface MusicClient {
 
     @PostMapping("/v1/music/kugou/import")
     Map<String, Object> kugouImport(@RequestBody Map<String, Object> body);
+
+    @PostMapping("/v1/music/collections")
+    Map<String, Object> addCollection(@RequestParam("type") byte type,
+                                      @RequestParam("songId") Integer songId);
 }

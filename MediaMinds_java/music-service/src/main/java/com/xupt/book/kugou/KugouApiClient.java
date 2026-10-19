@@ -207,6 +207,32 @@ public class KugouApiClient {
                 "complexsearch.kugou.com");
     }
 
+    /**
+     * 搜索歌手。
+     * 注意：歌手/专辑搜索在 msearch 上（complexsearch 只有 song），
+     * 返回结构也不同——歌手是 data 直接为数组。
+     */
+    public JsonNode searchSinger(String keyword, int page, int pageSize) {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("keyword", keyword);
+        params.put("page", String.valueOf(page));
+        params.put("pagesize", String.valueOf(pageSize));
+        params.put("showtype", "1");
+        return get("https://msearch.kugou.com", "/api/v3/search/singer", params, Sig.DEFAULT,
+                "msearch.kugou.com");
+    }
+
+    /** 搜索专辑（返回 data.info[]） */
+    public JsonNode searchAlbum(String keyword, int page, int pageSize) {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("keyword", keyword);
+        params.put("page", String.valueOf(page));
+        params.put("pagesize", String.valueOf(pageSize));
+        params.put("showtype", "1");
+        return get("https://msearch.kugou.com", "/api/v3/search/album", params, Sig.DEFAULT,
+                "msearch.kugou.com");
+    }
+
     /** 热搜词 */
     public JsonNode searchHot() {
         Map<String, String> params = new LinkedHashMap<>();

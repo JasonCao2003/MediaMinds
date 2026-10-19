@@ -8,11 +8,19 @@ import com.xupt.book.Mapper.BookMapper;
 import com.xupt.book.Pojo.BookChapter;
 import com.xupt.book.Pojo.Book;
 import com.xupt.book.Utils.MinioUtil;
+import com.xupt.book.file.BookFileReaderService;
+import com.xupt.book.file.BookFileService;
+import com.xupt.book.file.chapter.XhtmlTextExtractor;
 import jakarta.annotation.Resource;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.stereotype.Service;
 
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class BookChapterService {
@@ -22,6 +30,12 @@ public class BookChapterService {
 
     @Resource
     private BookMapper bookMapper;
+
+    @Resource
+    private BookFileReaderService readerService;
+
+    @Resource
+    private BookFileService bookFileService;
 
     // 分页查询章节列表
     public Result<Page<BookChapter>> getChapterList(Integer bookId, int page, int size) {
@@ -97,7 +111,7 @@ public class BookChapterService {
             chapter.setUpdateTime(LocalDateTime.now());
             bookChapterMapper.insert(chapter);
             // 更新书籍的章节总数
-            book.setChapterCount(book.getChapterCount() + 1);
+            book.setChapterCount((book.getChapterCount() == null ? 0 : book.getChapterCount()) + 1);
             book.setUpdateTime(LocalDateTime.now());
             bookMapper.updateById(book);
             return Result.success();
@@ -143,7 +157,7 @@ public class BookChapterService {
             }
             bookChapterMapper.deleteById(id);
             // 更新书籍的章节总数
-            book.setChapterCount(book.getChapterCount() - 1);
+            book.setChapterCount(Math.max(0, (book.getChapterCount() == null ? 0 : book.getChapterCount()) - 1));
             book.setUpdateTime(LocalDateTime.now());
             bookMapper.updateById(book);
             return Result.success();
@@ -159,26 +173,90 @@ public class BookChapterService {
             if (chapter == null) {
                 return Result.error(404, "章节不存在");
             }
-            
+
             String contentPath = chapter.getContentPath();
             if (contentPath == null || contentPath.trim().isEmpty()) {
                 return Result.error(404, "章节内容路径不存在");
             }
-            
-            // 记录路径用于调试
-            System.out.println("章节ID: " + id + ", 内容路径: " + contentPath);
-            
-            // 从阿里云OSS获取内容
-            try {
-                String content = MinioUtil.downloadFile(contentPath);
-                return Result.success(content);
-            } catch (Exception e) {
-                e.printStackTrace(); // 打印详细错误堆栈便于调试
-                return Result.error(500, "获取章节内容失败: " + e.getMessage());
-            }
+            return Result.success(resolveContent(contentPath));
         } catch (Exception e) {
-            e.printStackTrace(); // 打印详细错误堆栈便于调试
             return Result.error(500, "获取章节内容失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 解析章节正文。
+     *
+     * <p>普通章节是 MinIO 对象名；上传文件生成的章节是**指针**：
+     * {@code epub://} / {@code pdf://}——这里现取文件内容，不复制存储。
+     */
+    private String resolveContent(String contentPath) throws Exception {
+        if (contentPath.startsWith("epub://")) {
+            return readEpubPointer(contentPath);
+        }
+        if (contentPath.startsWith("pdf://")) {
+            return readPdfPointer(contentPath);
+        }
+        return MinioUtil.downloadFile(contentPath);
+    }
+
+    /** epub://{bookId}/{spineIndex}[/{start}-{end}] */
+    @SuppressWarnings("unchecked")
+    private String readEpubPointer(String pointer) throws Exception {
+        String[] parts = pointer.substring("epub://".length()).split("/");
+        if (parts.length < 2) {
+            throw new IllegalArgumentException("非法的 EPUB 章节指针: " + pointer);
+        }
+        int bookId = Integer.parseInt(parts[0]);
+        int index = Integer.parseInt(parts[1]);
+
+        Book book = bookFileService.loadBookWithFile(bookId);
+        if (book == null) {
+            throw new IllegalStateException("图书文件不存在或已被删除");
+        }
+        Map<String, Object> manifest = readerService.epubManifest(book);
+        List<Object> chapters = (List<Object>) manifest.get("chapters");
+        if (chapters == null || index < 0 || index >= chapters.size()) {
+            throw new IllegalStateException("章节索引超出范围");
+        }
+        Map<String, Object> chapter = (Map<String, Object>) chapters.get(index);
+        BookFileReaderService.Resource resource = readerService.epubResource(book, String.valueOf(chapter.get("path")));
+        if (resource == null || resource.data() == null) {
+            throw new IllegalStateException("EPUB 资源不存在");
+        }
+        String text = XhtmlTextExtractor.extract(resource.data());
+        if (parts.length >= 3) {
+            String[] range = parts[2].split("-", 2);
+            int start = Math.max(0, Integer.parseInt(range[0]));
+            int end = range.length > 1 ? Integer.parseInt(range[1]) : text.length();
+            end = Math.min(text.length(), Math.max(start, end));
+            text = text.substring(start, end);
+        }
+        return text;
+    }
+
+    /** pdf://{bookId}/{startPage}-{endPage} */
+    private String readPdfPointer(String pointer) throws Exception {
+        String[] parts = pointer.substring("pdf://".length()).split("/");
+        if (parts.length < 2) {
+            throw new IllegalArgumentException("非法的 PDF 章节指针: " + pointer);
+        }
+        int bookId = Integer.parseInt(parts[0]);
+        String[] range = parts[1].split("-", 2);
+        int start = Integer.parseInt(range[0]);
+        int end = range.length > 1 ? Integer.parseInt(range[1]) : start;
+
+        Book book = bookFileService.loadBookWithFile(bookId);
+        if (book == null) {
+            throw new IllegalStateException("图书文件不存在或已被删除");
+        }
+        Path cached = bookFileService.ensureCached(book);
+        try (PDDocument document = Loader.loadPDF(cached.toFile())) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            stripper.setSortByPosition(true);
+            stripper.setStartPage(Math.max(1, start));
+            stripper.setEndPage(Math.min(document.getNumberOfPages(), Math.max(start, end)));
+            return stripper.getText(document).trim();
         }
     }
 }

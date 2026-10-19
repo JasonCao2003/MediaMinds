@@ -76,9 +76,17 @@ export TMDB_ACCESS_TOKEN="<TMDB v4 Read Access Token>"
 export TMDB_API_KEY="<TMDB v3 API Key>"        # 与上一项二选一
 export KUGOU_TOKEN=""                           # 可选：酷狗登录态，用于解析 VIP 曲目直链
 export DEEPSEEK_API_KEY="sk-xxxxxx"             # 智能入库 Agent 的大模型 Key（LangChain4j）
+export GOOGLE_BOOKS_API_KEY="AIza..."           # 可选：Google Books 图书检索配额（不填走匿名配额）
 ```
 
 配置后 `video-service` 即可使用 `/v1/video/tmdb/*` 搜索与导入影视。
+
+配置 `GOOGLE_BOOKS_API_KEY` 后，`book-service` 的 `/v1/book/google/*` 走已鉴权配额
+（匿名调用在共享出口 IP 上很容易触发 `429`）。改动后需**重启 `book-service`** 才会生效——
+Spring 在启动时解析 `${GOOGLE_BOOKS_API_KEY:}`，运行期不会重读环境变量。
+
+> 建议在 Google Cloud Console 里给这个 Key 加限制：API 限制勾选 **Books API**；
+> 应用限制按部署形态选「IP 地址」（固定出口 IP 时）或「无」。
 
 `agent-service` 的大模型配置（可用环境变量覆盖）：
 
@@ -97,6 +105,7 @@ export DEEPSEEK_API_KEY="sk-xxxxxx"             # 智能入库 Agent 的大模�
 | --- | --- | --- |
 | 酷狗音乐 | `POST /v1/music/kugou/import` | 写入 `song`/`singer`，含歌词；直链需 VIP |
 | 豆瓣图书 | `POST /v1/book/douban/import?id=` | 写入 `book`（仅元信息：书名/作者/封面/简介/出版信息） |
+| Google Books | `POST /v1/book/google/import?id=` | 官方公开 API，写入 `book`（仅元信息）；建议配 `GOOGLE_BOOKS_API_KEY` |
 | TMDB | `POST /v1/video/tmdb/import/batch` | 写入 `movie`，自动建分类/标签并关联，海报入 MinIO |
 | 智能 Agent | `POST /v1/agent/chat`（多轮）/ `POST /v1/agent/query` / `POST /v1/agent/import` | 基于 **LangChain4j + DeepSeek** 的工具调用智能体：大模型自主检索（酷狗 / TMDB / 豆瓣）、生成自然语言回复，并可按序号批量入库元数据 |
 

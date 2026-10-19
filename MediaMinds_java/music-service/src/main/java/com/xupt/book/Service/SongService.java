@@ -17,13 +17,14 @@ public interface SongService {
 
     Song songOfId(Integer id);
 
-    IPage<Song> getSongsByPage(Integer pageNum, Integer pageSize);
+    IPage<Song> getSongsByPage(Integer pageNum, Integer pageSize, String sortField, String sortOrder);
 
     IPage<Song> getSongsBySingerIdPage(Integer singerId, Integer pageNum, Integer pageSize);
 
     IPage<Song> getSongsBySingerNamePage(String name, Integer pageNum, Integer pageSize);
 
-    IPage<Song> getSongByLikeNamePage(String s, Integer pageNum, Integer pageSize);
+    IPage<Song> getSongByLikeNamePage(String name, Integer pageNum, Integer pageSize,
+                                      String sortField, String sortOrder);
     
     Integer getSongCount();
 }

@@ -7,6 +7,7 @@ import com.xupt.book.Mapper.SingerMapper;
 import com.xupt.book.Mapper.SongMapper;
 import com.xupt.book.Pojo.Singer;
 import com.xupt.book.Pojo.Song;
+import com.xupt.book.Service.SingerNameResolver;
 import com.xupt.book.Service.SongService;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
@@ -18,14 +19,30 @@ public class SongServiceImpl implements SongService {
     private SongMapper songMapper;
     @Resource
     private SingerMapper singerMapper;
+    @Resource
+    private SingerNameResolver singerNameResolver;
 
     @Override
-    public IPage<Song> getSongsByPage(Integer pageNum, Integer pageSize) {
+    public IPage<Song> getSongsByPage(Integer pageNum, Integer pageSize,
+                                      String sortField, String sortOrder) {
         Page<Song> page = new Page<>(pageNum, pageSize);
-        // 按入库时间倒序 —— 前端「最近添加」直接复用这个接口
         QueryWrapper<Song> queryWrapper = new QueryWrapper<>();
-        queryWrapper.orderByDesc("create_time");
-        return songMapper.selectPage(page, queryWrapper);
+        applySort(queryWrapper, sortField, sortOrder);
+        IPage<Song> result = songMapper.selectPage(page, queryWrapper);
+        singerNameResolver.fill(result);
+        return result;
+    }
+
+    /** 排序白名单：默认按入库时间倒序 */
+    private void applySort(QueryWrapper<Song> wrapper, String sortField, String sortOrder) {
+        boolean asc = "asc".equalsIgnoreCase(sortOrder);
+        String field = sortField == null ? "" : sortField;
+        switch (field) {
+            case "name" -> wrapper.orderBy(true, asc, "name");
+            case "createTime" -> wrapper.orderBy(true, asc, "create_time");
+            default -> wrapper.orderByDesc("create_time");
+        }
+        wrapper.orderByAsc("id");
     }
 
     @Override
@@ -55,7 +72,7 @@ public class SongServiceImpl implements SongService {
 
     @Override
     public Song songOfId(Integer id) {
-        return songMapper.selectById(id);
+        return singerNameResolver.fill(songMapper.selectById(id));
     }
 
     @Override
@@ -63,7 +80,9 @@ public class SongServiceImpl implements SongService {
         Page<Song> page = new Page<>(pageNum, pageSize);
         QueryWrapper<Song> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("singer_id", singerId);
-        return songMapper.selectPage(page, queryWrapper);
+        IPage<Song> result = songMapper.selectPage(page, queryWrapper);
+        singerNameResolver.fill(result);
+        return result;
     }
 
     @Override
@@ -75,13 +94,21 @@ public class SongServiceImpl implements SongService {
         Page<Song> page = new Page<>(pageNum, pageSize);
         QueryWrapper<Song> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("singer_id",singer.getId());
-        return songMapper.selectPage(page, queryWrapper);
+        IPage<Song> result = songMapper.selectPage(page, queryWrapper);
+        singerNameResolver.fill(result);
+        return result;
     }
 
     @Override
-    public IPage<Song> getSongByLikeNamePage(String name, Integer pageNum, Integer pageSize) {
+    public IPage<Song> getSongByLikeNamePage(String name, Integer pageNum, Integer pageSize,
+                                             String sortField, String sortOrder) {
         Page<Song> page = new Page<>(pageNum, pageSize);
-        return songMapper.getLikeNamePage(page, name);
+        QueryWrapper<Song> queryWrapper = new QueryWrapper<>();
+        queryWrapper.like("name", name);
+        applySort(queryWrapper, sortField, sortOrder);
+        IPage<Song> result = songMapper.selectPage(page, queryWrapper);
+        singerNameResolver.fill(result);
+        return result;
     }
 
     @Override

@@ -27,6 +27,30 @@ export interface Book {
   bookDetails?: string;
   chapterCount?: number;
   source?: string;
+
+  // 上传的图书文件（只在 book 表记元信息，实体存 MinIO）
+  fileKey?: string;
+  /** epub / pdf / cbz */
+  fileFormat?: string;
+  fileSize?: number;
+  fileName?: string;
+  fileUploadedAt?: string;
+
+  // 出版元数据（本地抽取 + 在线补全）
+  subtitle?: string;
+  publisher?: string;
+  /** yyyy-MM-dd */
+  publishedDate?: string;
+  isbn13?: string;
+  isbn10?: string;
+  pageCount?: number;
+  language?: string;
+  rating?: number;
+  reviewCount?: number;
+  seriesName?: string;
+  seriesNumber?: number | string;
+  /** 元数据锁定：锁定后批量刷新 / BookDrop 不再自动改写 */
+  metadataLocked?: boolean;
 }
 
 export interface BookType {
@@ -58,6 +82,8 @@ export interface Movie {
   actors?: string;
   cover?: string;
   pic?: string;
+  /** 后端 Movie 实体的字段名就是 picture（DB 列同名），接口返回的是它 */
+  picture?: string;
   videoUrl?: string;
   description?: string;
   categoryId?: number;
@@ -71,6 +97,10 @@ export interface Movie {
   info?: string;
   watchProgress?: number;
   watchTime?: number;
+  /** 视频文件路径（媒体本体不入库，只存路径） */
+  video?: string;
+  /** 数据源标注：tmdb / manual / … */
+  source?: string;
 }
 
 export interface Song {
@@ -81,6 +111,16 @@ export interface Song {
   cover?: string;
   songUrl?: string;
   lyrics?: string;
+  /** 后端返回的字段（`song` 表） */
+  name?: string;
+  pic?: string;
+  url?: string;
+  lyric?: string;
+  /** 酷狗源信息：直链过期时按 hash 重新取播放地址 */
+  kugouHash?: string;
+  kugouAlbumId?: string;
+  kugouAlbumAudioId?: string;
+  source?: string;
   [key: string]: unknown;
 }
 

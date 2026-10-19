@@ -31,7 +31,8 @@ public class SingerController {
             singer.setBirth(singer.getBirth());
         }
         boolean res = singerService.addSinger(singer);
-        return res ? Result.success("添加成功") : Result.error("添加失败");
+        // 返回实体（含自增 id），前端随后要用它上传头像
+        return res ? Result.success(singer) : Result.error("添加失败");
     }
 
     @Operation(summary = "查询所有歌手", description = "返回所有歌手信息")

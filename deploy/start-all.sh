@@ -16,6 +16,12 @@ if [ -f "$ROOT/deploy/.env.local" ]; then
   echo "  ✔ 已载入 deploy/.env.local"
 fi
 
+# book-service 的图书文件暂存 / 缓存根目录。
+# 服务以 `java -jar` 启动、CWD 不固定，所以这里导出绝对路径；
+# 不设的话服务会回落到系统临时目录（重启可能被清理）。
+export BOOK_FILE_DIR="${BOOK_FILE_DIR:-$ROOT/deploy/data/book}"
+mkdir -p "$BOOK_FILE_DIR"
+
 # 服务名 : 端口 : 模块目录
 SERVICES=(
   "discovery-service:8761:discovery-service"

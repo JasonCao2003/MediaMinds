@@ -6,8 +6,13 @@ import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
+import io.minio.StatObjectArgs;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 
 public class MinioUtil {
 
@@ -91,6 +96,85 @@ public class MinioUtil {
     public static void deleteFile(String objectName) throws Exception {
         objectName = toObjectName(objectName);
         client().removeObject(RemoveObjectArgs.builder()
+                .bucket(BUCKET_NAME)
+                .object(objectName)
+                .build());
+    }
+
+    /**
+     * 上传文件到 MinIO（指定 Content-Type）。
+     *
+     * <p>图书文件必须带正确的 MIME：浏览器按它决定怎么渲染 EPUB / PDF / 图片。
+     */
+    public static String UploadFile(String objectName, InputStream in, String contentType) throws Exception {
+        MinioClient minioClient = client();
+        ensureBucket(minioClient);
+        PutObjectArgs.Builder builder = PutObjectArgs.builder()
+                .bucket(BUCKET_NAME)
+                .object(objectName)
+                .stream(in, -1, 10485760);
+        if (contentType != null && !contentType.isBlank()) {
+            builder.contentType(contentType);
+        }
+        minioClient.putObject(builder.build());
+        return baseUrl() + "/" + BUCKET_NAME + "/" + objectName;
+    }
+
+    /**
+     * 从本地文件上传到 MinIO。
+     *
+     * <p>与 {@link #UploadFile(String, InputStream)} 的区别：这里给出**确切长度**，
+     * MinIO 可以一次 PUT 完成，不必走分片；而且流直接来自文件，不占堆内存。
+     * 图书文件（几十 MB 的 PDF）走这条。
+     */
+    public static String uploadFile(String objectName, File file, String contentType) throws Exception {
+        MinioClient minioClient = client();
+        ensureBucket(minioClient);
+        PutObjectArgs.Builder builder = PutObjectArgs.builder()
+                .bucket(BUCKET_NAME)
+                .object(objectName)
+                .stream(new FileInputStream(file), file.length(), -1);
+        if (contentType != null && !contentType.isBlank()) {
+            builder.contentType(contentType);
+        }
+        minioClient.putObject(builder.build());
+        return baseUrl() + "/" + BUCKET_NAME + "/" + objectName;
+    }
+
+    /**
+     * 从 MinIO 下载到本地文件。
+     *
+     * <p>供「本地缓存副本 + ZipFile 随机读资源」用：EPUB / CBZ 都是 ZIP，
+     * 缓存一份到本地就能按需取单个 entry，不必每次请求都拉整个文件。
+     * 用流式拷贝，大文件不占堆内存。
+     */
+    public static void downloadToFile(String objectName, File target) throws Exception {
+        objectName = toObjectName(objectName);
+        File parent = target.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            throw new IllegalStateException("无法创建目录: " + parent);
+        }
+        try (InputStream in = client().getObject(GetObjectArgs.builder()
+                .bucket(BUCKET_NAME)
+                .object(objectName)
+                .build())) {
+            Files.copy(in, target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    /** 取对象字节数；对象不存在时抛异常 */
+    public static long statSize(String objectName) throws Exception {
+        objectName = toObjectName(objectName);
+        return client().statObject(StatObjectArgs.builder()
+                .bucket(BUCKET_NAME)
+                .object(objectName)
+                .build()).size();
+    }
+
+    /** 打开对象输入流（调用方负责关闭），用于把文件直接透传给 HTTP 响应 */
+    public static InputStream openStream(String objectName) throws Exception {
+        objectName = toObjectName(objectName);
+        return client().getObject(GetObjectArgs.builder()
                 .bucket(BUCKET_NAME)
                 .object(objectName)
                 .build());

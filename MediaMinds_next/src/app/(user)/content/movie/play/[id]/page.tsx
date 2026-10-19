@@ -25,6 +25,7 @@ import VolumeOffRoundedIcon from '@mui/icons-material/VolumeOffRounded';
 import { getMovieByIdService, updateWatchRecordService } from '@/api/video';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { pushRecent } from '@/lib/recent';
+import { areaLabel, languageLabel } from '@/lib/format';
 import type { Movie } from '@/types';
 
 function fmt(sec: number) {
@@ -106,7 +107,7 @@ export default function MoviePlayerPage() {
       id,
       title: movie?.name || movie?.movieName || '未命名',
       subtitle: movie?.directedBy || movie?.director,
-      cover: movie?.pic || movie?.cover,
+      cover: movie?.pic || movie?.picture || movie?.cover,
     });
   }, [playing, id, movie]);
 
@@ -152,7 +153,7 @@ export default function MoviePlayerPage() {
           component="video"
           ref={videoRef}
           src={src}
-          poster={((movie?.pic || (movie as { picture?: string })?.picture || movie?.cover) as string)}
+          poster={movie?.pic || movie?.picture || movie?.cover}
           onClick={togglePlay}
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
@@ -274,7 +275,10 @@ export default function MoviePlayerPage() {
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
                 {movie?.directedBy && <Chip label={`导演：${movie.directedBy}`} variant="outlined" size="small" />}
                 {movie?.actor && <Chip label={`主演：${movie.actor}`} variant="outlined" size="small" />}
-                {movie?.area && <Chip label={String(movie.area)} variant="outlined" size="small" />}
+                {areaLabel(movie?.area) && <Chip label={areaLabel(movie?.area)} variant="outlined" size="small" />}
+                {languageLabel(movie?.language) && (
+                  <Chip label={languageLabel(movie?.language)} variant="outlined" size="small" />
+                )}
                 {movie?.showTime && <Chip label={String(movie.showTime)} variant="outlined" size="small" />}
               </Stack>
               <Typography variant="body1" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>

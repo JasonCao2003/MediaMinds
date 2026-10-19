@@ -32,6 +32,8 @@ interface PlayerState {
   setPlaying: (playing: boolean) => void;
   next: () => void;
   prev: () => void;
+  /** 更新当前曲目的字段（如补齐封面 / 歌词） */
+  updateCurrent: (patch: Partial<Track>) => void;
 }
 
 export const usePlayerStore = create<PlayerState>()(
@@ -94,6 +96,15 @@ export const usePlayerStore = create<PlayerState>()(
           if (!state.playlist.length) return state;
           const index = (state.currentIndex - 1 + state.playlist.length) % state.playlist.length;
           return { currentIndex: index, current: state.playlist[index], playing: true };
+        }),
+      updateCurrent: (patch) =>
+        set((state) => {
+          if (!state.current) return state;
+          const updated = { ...state.current, ...patch };
+          const playlist = state.playlist.map((track, index) =>
+            index === state.currentIndex ? updated : track,
+          );
+          return { current: updated, playlist };
         }),
     }),
     {

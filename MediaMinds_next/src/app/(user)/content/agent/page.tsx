@@ -73,7 +73,7 @@ const TOOL_LABEL: Record<string, string> = {
   searchMovies: '检索影片',
   searchMoviesByPerson: '按人物检索影片',
   searchBooks: '检索图书',
-  importCandidates: '批量入库',
+  importCandidates: '批量收藏',
 };
 
 const keyOf = (c: AgentCandidate) => `${c.source}:${c.sourceId}`;
@@ -159,7 +159,7 @@ export default function AgentPage() {
 
   const doImport = async () => {
     if (selectedList.length === 0) {
-      toast.warning('请先选择要入库的条目');
+      toast.warning('请先选择要收藏的条目');
       return;
     }
     setImporting(true);
@@ -168,14 +168,14 @@ export default function AgentPage() {
       const data = res.data;
       const ok = data?.importedCount ?? 0;
       const fail = data?.failedCount ?? 0;
-      if (ok > 0) toast.success(`已入库 ${ok} 条元数据${fail > 0 ? `，${fail} 条失败` : ''}`);
-      else toast.error(`入库失败${fail > 0 ? `（${fail} 条）` : ''}，请稍后重试`);
+      if (ok > 0) toast.success(`已收藏 ${ok} 条（已写入本地库）${fail > 0 ? `，${fail} 条失败` : ''}`);
+      else toast.error(`收藏失败${fail > 0 ? `（${fail} 条）` : ''}，请稍后重试`);
       setMessages((prev) => [
         ...prev,
         {
           id: nextId(),
           role: 'agent',
-          text: `批量入库完成：成功 ${ok} 条，失败 ${fail} 条。媒体本体未入库，可在对应列表页自行上传文件。`,
+          text: `批量收藏完成：成功 ${ok} 条（已写入本地库），失败 ${fail} 条。媒体本体可在对应列表页自行上传。`,
         },
       ]);
       setSelected({});
@@ -312,7 +312,7 @@ export default function AgentPage() {
           <EmptyState
             icon={<AutoAwesomeRoundedIcon sx={{ fontSize: 64 }} />}
             title="告诉我你想要什么"
-            description="例如：我想要周杰伦的歌 / 帮我找电影 星际穿越 / 有没有刘慈欣写的书 / 汤姆·汉克斯主演的影片。也可以连续追问，比如「前三个都入库」。"
+            description="例如：我想要周杰伦的歌 / 帮我找电影 星际穿越 / 有没有刘慈欣写的书 / 汤姆·汉克斯主演的影片。也可以连续追问，比如「前三个都收藏」。"
           />
         ) : (
           <Stack spacing={2.5}>
@@ -522,10 +522,10 @@ export default function AgentPage() {
             >
               <CheckCircleRoundedIcon sx={{ color: mm.success, fontSize: 22 }} />
               <Typography variant="body2" fontWeight={700}>
-                已选 {selectedList.length} 条，等待确认入库
+                已选 {selectedList.length} 条，等待确认收藏
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                仅入库元数据，媒体本体请在对应列表页自行上传
+                收藏的同时写入本地库，媒体本体可在对应列表页自行上传
               </Typography>
             </Box>
           )}
@@ -561,7 +561,7 @@ export default function AgentPage() {
               disabled={importing || selectedList.length === 0}
               sx={{ minWidth: 150, height: 40 }}
             >
-              批量入库{selectedList.length > 0 ? `（${selectedList.length}）` : ''}
+              批量收藏{selectedList.length > 0 ? `（${selectedList.length}）` : ''}
             </Button>
             <Button
               variant="text"

@@ -8,6 +8,7 @@ import com.xupt.book.Mapper.SongMapper;
 import com.xupt.book.Pojo.ListSong;
 import com.xupt.book.Pojo.Song;
 import com.xupt.book.Service.ListSongService;
+import com.xupt.book.Service.SingerNameResolver;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
@@ -25,6 +26,8 @@ public class ListSongServiceImpl implements ListSongService {
     private ListSongMapper listSongMapper;
     @Resource
     private SongMapper  songMapper;
+    @Resource
+    private SingerNameResolver singerNameResolver;
 
     @Override
     public boolean updateListSongMsg(ListSong listSong) {
@@ -32,12 +35,30 @@ public class ListSongServiceImpl implements ListSongService {
     }
 
     @Override
-    public boolean deleteListSong(Integer songId) {
-        return listSongMapper.deleteListSong(songId) > 0;
+    public boolean deleteListSong(Integer id) {
+        return listSongMapper.deleteListSong(id) > 0;
+    }
+
+    @Override
+    public boolean removeSongFromSongList(Integer songListId, Integer songId) {
+        if (songListId == null || songId == null) {
+            return false;
+        }
+        return listSongMapper.removeSongFromSongList(songListId, songId) > 0;
     }
 
     @Override
     public boolean addListSong(ListSong listSong) {
+        if (listSong == null || listSong.getSongId() == null || listSong.getSongListId() == null) {
+            return false;
+        }
+        // 同一首歌在同一歌单里只保留一条，重复添加直接返回失败（控制器会提示「已在歌单中」）
+        QueryWrapper<ListSong> exists = new QueryWrapper<>();
+        exists.eq("song_list_id", listSong.getSongListId())
+                .eq("song_id", listSong.getSongId());
+        if (listSongMapper.selectCount(exists) > 0) {
+            return false;
+        }
         return listSongMapper.insert(listSong) > 0;
     }
 
@@ -84,6 +105,7 @@ public class ListSongServiceImpl implements ListSongService {
         songPage.setSize(pageSize);
         songPage.setCurrent(pageNum);
 
+        singerNameResolver.fill(songPage);
         return songPage;
     }
 

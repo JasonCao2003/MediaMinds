@@ -158,6 +158,11 @@ public class CategoryService {
 
     // 根据分类ID获取电影列表
     public Result<Page<Movie>> getMoviesByCategoryId(Long categoryId, int page, int size) {
+        return getMoviesByCategoryId(categoryId, page, size, null, null);
+    }
+
+    public Result<Page<Movie>> getMoviesByCategoryId(Long categoryId, int page, int size,
+                                                     String sortField, String sortOrder) {
         try {
             if (categoryId == null) {
                 return Result.error(400, "分类ID不能为空");
@@ -185,13 +190,27 @@ public class CategoryService {
             // 查询电影详情
             Page<Movie> pageInfo = new Page<>(page, size);
             LambdaQueryWrapper<Movie> movieQueryWrapper = new LambdaQueryWrapper<>();
-            movieQueryWrapper.in(Movie::getId, movieIds)
-                      .orderByDesc(Movie::getCreateTime);
+            movieQueryWrapper.in(Movie::getId, movieIds);
+            applyMovieSort(movieQueryWrapper, sortField, sortOrder);
             movieMapper.selectPage(pageInfo, movieQueryWrapper);
             
             return Result.success(pageInfo);
         } catch (Exception e) {
             return Result.error(500, "根据分类查询电影列表失败: " + e.getMessage());
         }
+    }
+
+    /** 排序白名单，默认按入库时间倒序 */
+    private void applyMovieSort(LambdaQueryWrapper<Movie> wrapper, String sortField, String sortOrder) {
+        boolean asc = "asc".equalsIgnoreCase(sortOrder);
+        String field = sortField == null ? "" : sortField;
+        switch (field) {
+            case "name" -> wrapper.orderBy(true, asc, Movie::getName);
+            case "rate" -> wrapper.orderBy(true, asc, Movie::getRate);
+            case "showTime" -> wrapper.orderBy(true, asc, Movie::getShowTime);
+            case "createTime" -> wrapper.orderBy(true, asc, Movie::getCreateTime);
+            default -> wrapper.orderByDesc(Movie::getCreateTime);
+        }
+        wrapper.orderByAsc(Movie::getId);
     }
 } 

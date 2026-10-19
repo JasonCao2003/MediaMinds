@@ -1,18 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Children, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
   Button,
   Card,
-  CardContent,
-  Chip,
   FormControl,
   IconButton,
   InputAdornment,
   MenuItem,
-  Rating,
   Select,
   Skeleton,
   Stack,
@@ -24,15 +21,17 @@ import {
   useTheme,
 } from '@mui/material';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
-import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import StarBorderRoundedIcon from '@mui/icons-material/StarBorderRounded';
 import MovieRoundedIcon from '@mui/icons-material/MovieRounded';
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import CategoryRoundedIcon from '@mui/icons-material/CategoryRounded';
+import LocalOfferRoundedIcon from '@mui/icons-material/LocalOfferRounded';
 import EmptyState from '@/components/common/EmptyState';
 import CoverImage from '@/components/common/CoverImage';
-import { getRecent, relativeTime, type RecentItem } from '@/lib/recent';
+import TmdbPanel from '@/components/user/TmdbPanel';
 import { toast } from '@/lib/notify';
 import { normalizePage } from '@/lib/page';
 import {
@@ -41,12 +40,33 @@ import {
   getAllCategoriesService,
   getMoviesByCategoryIdService,
   getVideoFavoriteListService,
+  getWatchHistoryService,
   addVideoFavoriteService,
   cancelVideoFavoriteService,
+  addMovieService,
+  updateMovieService,
+  deleteMovieService,
+  updateMovieCoverService,
+  addCategoryService,
+  updateCategoryService,
+  getAllTagsService,
+  addTagService,
+  updateTagService,
+  type TmdbDimension,
 } from '@/api/video';
+import type { Movie } from '@/types';
+import { MOVIE_FIELDS, toMoviePayload } from '@/lib/movieForm';
+import FormDialog, { type FormField } from '@/components/manage/FormDialog';
+import DimensionDialog, { type DimensionItem } from '@/components/manage/DimensionDialog';
+import { useCrud } from '@/components/manage/useCrud';
 
-type VideoView = 'recent' | 'all' | 'favorite';
-type RecentMode = 'added' | 'watched';
+type VideoView = 'recent' | 'all' | 'favorite' | 'online';
+
+const DIMENSION_LABEL: Record<TmdbDimension, string> = {
+  title: '片名',
+  actor: '演员',
+  director: '导演',
+};
 
 interface MovieItem {
   id: number;
@@ -64,26 +84,58 @@ interface MovieItem {
 
 const PAGE_SIZE = 12;
 
-/** 「最近添加」一眼看完，不分页 */
-const RECENT_SIZE = 24;
+/** 库的排序选项（字段 + 方向） */
+type VideoSortKey = 'createTime-desc' | 'createTime-asc' | 'rate-desc' | 'showTime-desc' | 'name-asc';
+
+const SORT_OPTIONS: { value: VideoSortKey; label: string }[] = [
+  { value: 'createTime-desc', label: '最近添加' },
+  { value: 'createTime-asc', label: '最早添加' },
+  { value: 'rate-desc', label: '评分从高到低' },
+  { value: 'showTime-desc', label: '上映时间从新到旧' },
+  { value: 'name-asc', label: '片名 A → Z' },
+];
+
+/** 「最近添加」「最近观看」各取 3 个（一行三个），不分页 */
+const RECENT_SIZE = 3;
+
+const CATEGORY_FIELDS: FormField[] = [
+  { name: 'name', label: '分类名', required: true, maxLength: 50 },
+  { name: 'description', label: '描述', maxLength: 255 },
+  { name: 'sortOrder', label: '排序', type: 'number', helperText: '数字越小越靠前' },
+];
+
+const TAG_FIELDS: FormField[] = [
+  { name: 'name', label: '标签名', required: true, maxLength: 50 },
+  { name: 'description', label: '描述', maxLength: 255 },
+];
 
 export default function VideoViewPage() {
   const router = useRouter();
-  const { mm } = useTheme();
   const [movies, setMovies] = useState<MovieItem[]>([]);
   const [favorites, setFavorites] = useState<MovieItem[]>([]);
-  const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
+  const [categories, setCategories] = useState<Record<string, unknown>[]>([]);
+  const [tags, setTags] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [categoryId, setCategoryId] = useState<number | null>(null);
-  const [sortOrder, setSortOrder] = useState('rating');
   const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
   const [view, setView] = useState<VideoView>('recent');
-  const [recentMode, setRecentMode] = useState<RecentMode>('added');
+  /** 库的排序：默认按添加顺序（最新在最上） */
+  const [sortKey, setSortKey] = useState<VideoSortKey>('createTime-desc');
   const [recentAdded, setRecentAdded] = useState<MovieItem[]>([]);
-  const [recentWatched, setRecentWatched] = useState<RecentItem[]>([]);
+  /** 「最近观看」直接来自服务端的观看历史（user_video_interaction），封面等字段都是全的 */
+  const [watchedMovies, setWatchedMovies] = useState<MovieItem[]>([]);
+  /** 在线搜索维度：片名 / 演员 / 导演 */
+  const [onlineDimension, setOnlineDimension] = useState<TmdbDimension>('title');
+  /** 每次点「搜索」自增，让面板强制重搜同一个关键词 */
+  const [searchNonce, setSearchNonce] = useState(0);
+
+  // 管理相关弹窗
+  const [movieFormOpen, setMovieFormOpen] = useState(false);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [tagDialogOpen, setTagDialogOpen] = useState(false);
 
   const mapMovie = useCallback(
     (raw: Record<string, unknown>): MovieItem => ({
@@ -104,22 +156,39 @@ export default function VideoViewPage() {
   const loadMovies = useCallback(async () => {
     setLoading(true);
     try {
+      const [sortField, sortOrder] = sortKey.split('-');
+      const sort = { sortField, sortOrder };
       let res;
       if (categoryId) {
-        res = await getMoviesByCategoryIdService(categoryId, page, PAGE_SIZE);
+        res = await getMoviesByCategoryIdService(categoryId, page, PAGE_SIZE, sort);
       } else if (keyword) {
         // 后端模糊搜索同时覆盖片名 / 导演 / 主演，不再需要用户选维度
-        res = await searchMovieService(keyword, page, PAGE_SIZE);
+        res = await searchMovieService(keyword, page, PAGE_SIZE, sort);
       } else {
-        res = await getMovieListService(page, PAGE_SIZE);
+        res = await getMovieListService(page, PAGE_SIZE, sort);
       }
       const { rows, total: t } = normalizePage<Record<string, unknown>>(res);
-      setMovies(sortMovies(rows.map(mapMovie), sortOrder));
+      setMovies(rows.map(mapMovie));
       setTotal(t);
     } finally {
       setLoading(false);
     }
-  }, [categoryId, keyword, page, sortOrder, mapMovie]);
+  }, [categoryId, keyword, page, mapMovie, sortKey]);
+
+  /**
+   * 搜索：切到「全部」视图展示结果。
+   * page 若发生变化，effect 会重新加载；若本来就是第 1 页，则手动补一次。
+   * 在线视图交给 TMDB 面板，nonce 自增强制重搜。
+   */
+  const handleSearch = () => {
+    if (view === 'online') {
+      setSearchNonce((n) => n + 1);
+      return;
+    }
+    setView('all');
+    setPage(1);
+    if (page === 1) loadMovies();
+  };
 
   /** 最近添加：直接复用 /list（后端已按 create_time 倒序），只取一页，不再手动排序 */
   const loadRecentAdded = useCallback(async () => {
@@ -133,17 +202,30 @@ export default function VideoViewPage() {
     }
   }, [mapMovie]);
 
+  /** 观看历史：后端已按 last_watch_time 倒序，取前 RECENT_SIZE 条 */
+  const loadWatchHistory = useCallback(async () => {
+    try {
+      const res = (await getWatchHistoryService(1, RECENT_SIZE)) as {
+        data?: { records?: Record<string, unknown>[] };
+      };
+      setWatchedMovies((res?.data?.records ?? []).map(mapMovie));
+    } catch {
+      setWatchedMovies([]);
+    }
+  }, [mapMovie]);
+
+
   const loadFavoriteMovies = useCallback(async () => {
     setLoading(true);
     try {
       const res = await getVideoFavoriteListService(page, PAGE_SIZE);
       const { rows, total: t } = normalizePage<Record<string, unknown>>(res);
-      setFavorites(sortMovies(rows.map(mapMovie), sortOrder));
+      setFavorites(rows.map(mapMovie));
       setTotal(t);
     } finally {
       setLoading(false);
     }
-  }, [page, sortOrder, mapMovie]);
+  }, [page, mapMovie]);
 
   /** 一次拉取收藏列表，避免逐个影片查询 */
   const loadFavorites = useCallback(async () => {
@@ -156,12 +238,60 @@ export default function VideoViewPage() {
     }
   }, []);
 
+  const reloadCategories = useCallback(async () => {
+    try {
+      const res = await getAllCategoriesService();
+      setCategories((res.data as unknown as Record<string, unknown>[]) || []);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const reloadTags = useCallback(async () => {
+    try {
+      const res = (await getAllTagsService()) as { data?: Record<string, unknown>[] };
+      setTags(res?.data ?? []);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  /** 保存后刷新当前视图的列表 */
+  const reloadList = useCallback(() => {
+    if (view === 'recent') {
+      loadWatchHistory();
+    } else if (view === 'favorite') loadFavoriteMovies();
+    else if (view === 'all') loadMovies();
+  }, [view, loadMovies, loadRecentAdded, loadFavoriteMovies, loadWatchHistory]);
+
+  const movieCrud = useCrud({
+    create: (v) => addMovieService(v as Partial<Movie>),
+    update: (v) => updateMovieService(v as Partial<Movie>),
+    remove: (id) => deleteMovieService(id),
+    onChanged: reloadList,
+    label: '影片',
+  });
+
+  // 分类 / 标签只支持新建 / 编辑：它们被影片引用，删除会产生悬空引用
+  const categoryCrud = useCrud({
+    create: (v) => addCategoryService(v),
+    update: (v) => updateCategoryService(v),
+    onChanged: reloadCategories,
+    label: '分类',
+  });
+
+  const tagCrud = useCrud({
+    create: (v) => addTagService(v),
+    update: (v) => updateTagService(v),
+    onChanged: reloadTags,
+    label: '标签',
+  });
+
   useEffect(() => {
-    getAllCategoriesService()
-      .then((res) => setCategories((res.data as unknown as Array<{ id: number; name: string }>) || []))
-      .catch(() => undefined);
+    reloadCategories();
+    reloadTags();
     loadFavorites();
-  }, [loadFavorites]);
+  }, [reloadCategories, reloadTags, loadFavorites]);
 
   useEffect(() => {
     if (view === 'favorite') {
@@ -169,33 +299,23 @@ export default function VideoViewPage() {
       return;
     }
     if (view === 'recent') {
-      if (recentMode === 'added') {
-        loadRecentAdded();
-      } else {
-        // 最近观看走本地记录，不需要请求后端
-        setRecentWatched(getRecent('video'));
-      }
+      // 「最近」只看最近观看
+      loadWatchHistory();
+      return;
+    }
+    if (view === 'online') {
+      // 在线视图由 TMDB 面板自行拉取，不触碰本地列表
       return;
     }
     loadMovies();
-  }, [view, recentMode, loadMovies, loadRecentAdded, loadFavoriteMovies]);
+  }, [view, loadMovies, loadRecentAdded, loadFavoriteMovies, loadWatchHistory]);
 
-  const display = useMemo<MovieItem[]>(() => {
-    if (view === 'favorite') return favorites;
-
-    if (view === 'recent' && recentMode === 'watched') {
-      // 本地记录只有卡片快照，把「最近时间」放进描述字段展示
-      return recentWatched.map((r) => ({
-        id: Number(r.id),
-        name: r.title,
-        directedBy: r.subtitle,
-        pic: r.cover,
-        abs: relativeTime(r.at),
-      }));
-    }
-
-    return view === 'recent' ? recentAdded : movies;
-  }, [view, recentMode, movies, recentAdded, favorites, recentWatched]);
+  /** 「最近观看」的本地快照 → 卡片数据（把最近时间放进描述字段展示） */
+  /** 普通网格（全部 / 收藏）的数据 */
+  const display = useMemo<MovieItem[]>(
+    () => (view === 'favorite' ? favorites : movies),
+    [view, movies, favorites],
+  );
 
   const toggleFavorite = async (movie: MovieItem) => {
     if (favoriteIds.includes(movie.id)) {
@@ -213,11 +333,89 @@ export default function VideoViewPage() {
     }
   };
 
+  /** 分类 / 标签管理弹窗的列表数据 */
+  const categoryItems: DimensionItem[] = useMemo(
+    () =>
+      categories
+        .filter((c) => c.id != null)
+        .map((c) => ({
+          id: Number(c.id),
+          label: String(c.name ?? '未命名'),
+          caption: c.description ? String(c.description) : undefined,
+          raw: {
+            name: String(c.name ?? ''),
+            description: c.description ? String(c.description) : '',
+            sortOrder: c.sortOrder ?? '',
+          },
+        })),
+    [categories],
+  );
+
+  const tagItems: DimensionItem[] = useMemo(
+    () =>
+      tags
+        .filter((t) => t.id != null)
+        .map((t) => ({
+          id: Number(t.id),
+          label: String(t.name ?? '未命名'),
+          caption: t.description ? String(t.description) : undefined,
+          raw: { name: String(t.name ?? ''), description: t.description ? String(t.description) : '' },
+        })),
+    [tags],
+  );
+
+  // ============================================================
+  // 管理：影片（新建在本页；编辑 / 删除在详情页）
+  // ============================================================
+
+  const submitMovie = async (values: Record<string, unknown>, files: Record<string, File>) => {
+    const { ok, data } = await movieCrud.save(toMoviePayload(values), false);
+    if (!ok) return;
+
+    // 海报单独上传：接口需要已有 id，用后端回传的实体 id
+    const poster = files.picture;
+    if (poster) {
+      const createdId = (data as { id?: number } | undefined)?.id;
+      if (createdId) {
+        try {
+          await updateMovieCoverService(createdId, poster);
+          toast.success('海报上传成功');
+          reloadList();
+        } catch {
+          toast.error('海报上传失败，可在详情页重试');
+        }
+      } else {
+        toast.warning('未拿到新影片 id，海报未上传');
+      }
+    }
+
+    setMovieFormOpen(false);
+  };
+
+  // ============================================================
+  // 管理：分类 / 标签
+  // ============================================================
+
+  const submitCategory = async (values: Record<string, unknown>, editingId: string | number | null) => {
+    const payload: Record<string, unknown> = { ...values };
+    if (payload.sortOrder === '' || payload.sortOrder == null) delete payload.sortOrder;
+    else payload.sortOrder = Number(payload.sortOrder);
+    if (editingId != null) payload.id = editingId;
+    const { ok } = await categoryCrud.save(payload, editingId != null);
+    return ok;
+  };
+
+  const submitTag = async (values: Record<string, unknown>, editingId: string | number | null) => {
+    const payload: Record<string, unknown> = editingId == null ? { ...values } : { ...values, id: editingId };
+    const { ok } = await tagCrud.save(payload, editingId != null);
+    return ok;
+  };
+
   const titleText = (() => {
-    if (view === 'recent') return recentMode === 'added' ? '最近添加' : '最近观看';
+    if (view === 'recent' || view === 'online') return '';
     if (view === 'favorite') return '我的收藏';
     if (keyword) return `“${keyword}” 的搜索结果`;
-    return '全部影片';
+    return '我的影视库';
   })();
 
   return (
@@ -227,15 +425,10 @@ export default function VideoViewPage() {
           <TextField
             fullWidth
             size="small"
-            placeholder="输入片名、导演或主演"
+            placeholder={view === 'online' ? '搜索 TMDB（片名 / 演员 / 导演）' : '输入片名、导演或主演'}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                setPage(1);
-                loadMovies();
-              }
-            }}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             slotProps={{
               input: {
                 startAdornment: (
@@ -243,28 +436,56 @@ export default function VideoViewPage() {
                     <SearchRoundedIcon fontSize="small" />
                   </InputAdornment>
                 ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Button size="small" variant="contained" onClick={handleSearch}>
+                      搜索
+                    </Button>
+                  </InputAdornment>
+                ),
               },
             }}
           />
-          {/* 排序与「最近」的时间序会打架，最近视图下隐藏 */}
-          {view !== 'recent' && (
-            <FormControl size="small" sx={{ minWidth: 150 }}>
-              {/* 不显示「排序」浮动标签，框内直接显示当前排序方式 */}
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            {view === 'online' ? (
+              /* 在线：筛选变成搜索维度 */
               <Select
                 displayEmpty
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value)}
-                renderValue={(v) =>
-                  ({ rating: '按评分', year: '按年份', title: '按片名' })[v as string] ?? '排序'
-                }
-                inputProps={{ 'aria-label': '排序方式' }}
+                value={onlineDimension}
+                onChange={(e) => setOnlineDimension(e.target.value as TmdbDimension)}
+                renderValue={(v) => DIMENSION_LABEL[v as TmdbDimension] ?? '片名'}
+                inputProps={{ 'aria-label': '搜索维度' }}
               >
-                <MenuItem value="rating">按评分</MenuItem>
-                <MenuItem value="year">按年份</MenuItem>
-                <MenuItem value="title">按片名</MenuItem>
+                <MenuItem value="title">片名</MenuItem>
+                <MenuItem value="actor">演员</MenuItem>
+                <MenuItem value="director">导演</MenuItem>
               </Select>
-            </FormControl>
-          )}
+            ) : (
+              /* 本地：按类型筛选（不显示「类型」浮动标签，框内默认显示「全部」） */
+              <Select
+                displayEmpty
+                value={categoryId ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCategoryId(v === '' ? null : Number(v));
+                  setPage(1);
+                }}
+                renderValue={(v) => {
+                  const key = v as number | '';
+                  if (key === '') return '全部';
+                  return String(categories.find((c) => Number(c.id) === Number(key))?.name ?? '全部');
+                }}
+                inputProps={{ 'aria-label': '按类型筛选' }}
+              >
+                <MenuItem value="">全部</MenuItem>
+                {categories.map((c) => (
+                  <MenuItem key={String(c.id)} value={Number(c.id)}>
+                    {String(c.name ?? '')}
+                  </MenuItem>
+                ))}
+              </Select>
+            )}
+          </FormControl>
           <ToggleButtonGroup
             exclusive
             value={view}
@@ -277,82 +498,89 @@ export default function VideoViewPage() {
             size="small"
           >
             <ToggleButton value="recent">最近</ToggleButton>
-            <ToggleButton value="all">全部</ToggleButton>
             <ToggleButton value="favorite">收藏</ToggleButton>
+            <ToggleButton value="all">库</ToggleButton>
+            <ToggleButton value="online">在线</ToggleButton>
           </ToggleButtonGroup>
-          {/* 「最近」的两种口径 */}
-          {view === 'recent' && (
-            <ToggleButtonGroup
-              exclusive
-              size="small"
-              value={recentMode}
-              onChange={(_, v) => v && setRecentMode(v as RecentMode)}
-            >
-              <ToggleButton value="added">最近添加</ToggleButton>
-              <ToggleButton value="watched">最近观看</ToggleButton>
-            </ToggleButtonGroup>
-          )}
-          <Button
-            variant="contained"
-            onClick={() => {
-              // 搜索是「翻库」动作，切到全部视图展示结果
-              setPage(1);
-              setView('all');
-              if (!keyword) loadMovies();
-            }}
-          >
-            搜索
-          </Button>
-          <Button
-            variant="outlined"
-            color="inherit"
-            onClick={() => {
-              setKeyword('');
-              setCategoryId(null);
-              setSortOrder('rating');
-              setPage(1);
-            }}
-          >
-            重置
-          </Button>
-        </Stack>
 
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 2 }}>
-          <Chip
-            label="全部"
-            color={categoryId === null ? 'primary' : 'default'}
-            onClick={() => {
-              setCategoryId(null);
-              setPage(1);
-            }}
-          />
-          {categories.map((c) => (
-            <Chip
-              key={c.id}
-              label={c.name}
-              color={categoryId === c.id ? 'primary' : 'default'}
-              onClick={() => {
-                setCategoryId(c.id);
-                setKeyword('');
-                setPage(1);
-              }}
-            />
-          ))}
         </Stack>
       </Card>
 
-      <Typography variant="h6" fontWeight={800} sx={{ mb: 2.5 }}>
-        {titleText}
-      </Typography>
+      {titleText && (
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1.5}
+          sx={{ mb: 2.5, flexWrap: 'wrap', rowGap: 1 }}
+        >
+          <Typography variant="h6" fontWeight={800}>
+            {titleText}
+          </Typography>
+          <Box sx={{ flex: 1, minWidth: 0 }} />
+          {view === 'all' && (
+            <FormControl size="small" sx={{ minWidth: 190 }}>
+              <Select
+                value={sortKey}
+                onChange={(e) => {
+                  setSortKey(e.target.value as VideoSortKey);
+                  setPage(1);
+                }}
+                renderValue={(v) => `排序：${SORT_OPTIONS.find((o) => o.value === v)?.label ?? '最近添加'}`}
+                inputProps={{ 'aria-label': '排序规则' }}
+              >
+                {SORT_OPTIONS.map((o) => (
+                  <MenuItem key={o.value} value={o.value}>
+                    {o.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+        </Stack>
+      )}
 
-      {loading ? (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,1fr)', md: 'repeat(4,1fr)' }, gap: 3 }}>
+      {view === 'online' ? (
+        <TmdbPanel
+          keyword={keyword}
+          dimension={onlineDimension}
+          nonce={searchNonce}
+          onImported={() => {
+            loadFavorites();
+            reloadList();
+          }}
+        />
+      ) : view === 'recent' ? (
+        /* 「最近」只看最近观看，网格与「库」一致：一行六个 */
+        watchedMovies.length === 0 ? (
+          <EmptyState
+            icon={<MovieRoundedIcon sx={{ fontSize: 64 }} />}
+            title="还没有观看记录"
+            description="播放一部影片后，这里会显示最近看过的影片"
+          />
+        ) : (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,1fr)', md: 'repeat(4,1fr)', lg: 'repeat(6,1fr)' },
+              gap: 2.5,
+            }}
+          >
+            {watchedMovies.map((m) => (
+              <MovieCard
+                key={m.id}
+                movie={m}
+                isFavorite={favoriteIds.includes(m.id)}
+                onOpen={() => router.push(`/content/movie/${m.id}`)}
+                onToggleFavorite={() => toggleFavorite(m)}
+              />
+            ))}
+          </Box>
+        )
+      ) : loading ? (
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,1fr)', md: 'repeat(4,1fr)', lg: 'repeat(6,1fr)' }, gap: 2.5 }}>
           {Array.from({ length: 8 }).map((_, i) => (
             <Card key={i} sx={{ borderRadius: 'var(--mm-radius-lg)', overflow: 'hidden' }}>
-              <Skeleton variant="rectangular" height={260} sx={{ borderRadius: 'var(--mm-radius-lg) var(--mm-radius-lg) 0 0' }} />
-              <CardContent>
-                <Skeleton variant="text" />
-              </CardContent>
+              <Skeleton variant="rectangular" sx={{ aspectRatio: '2 / 3', borderRadius: 'var(--mm-radius-lg)' }} />
             </Card>
           ))}
         </Box>
@@ -363,118 +591,20 @@ export default function VideoViewPage() {
           description="换个关键词或分类试试吧"
         />
       ) : (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,1fr)', md: 'repeat(3,1fr)', lg: 'repeat(4,1fr)' }, gap: 3 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,1fr)', md: 'repeat(4,1fr)', lg: 'repeat(6,1fr)' }, gap: 2.5 }}>
           {display.map((m) => (
-            <Card
+            <MovieCard
               key={m.id}
-              className="mm-hover-lift"
-              onClick={() => router.push(`/content/movie/play/${m.id}`)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  router.push(`/content/movie/play/${m.id}`);
-                }
-              }}
-              sx={{ borderRadius: 'var(--mm-radius-lg)', overflow: 'hidden', cursor: 'pointer' }}
-            >
-              <Box sx={{ position: 'relative' }}>
-                <CoverImage
-                  src={m.pic}
-                  alt={m.name}
-                  sx={{ width: '100%', height: 260, objectFit: 'cover', display: 'block', bgcolor: 'var(--mm-sunken)' }}
-                />
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    inset: 0,
-                    display: 'grid',
-                    placeItems: 'center',
-                    opacity: 0,
-                    '&:hover, &:focus-within': { opacity: 1 },
-                  }}
-                >
-                  <Tooltip title="立即播放">
-                    <IconButton
-                      aria-label="立即播放"
-                      sx={{
-                        width: 56,
-                        height: 56,
-                        bgcolor: 'var(--mm-bg)',
-                        color: 'var(--mm-accent-text)',
-                        boxShadow: 'var(--mm-float)',
-                        '&:hover': { bgcolor: 'var(--mm-bg)', color: 'var(--mm-accent-text)' },
-                      }}
-                    >
-                      <PlayArrowRoundedIcon fontSize="large" />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-                {m.type && (
-                  <Chip
-                    label={m.type}
-                    size="small"
-                    sx={{
-                      position: 'absolute',
-                      top: 12,
-                      left: 12,
-                      bgcolor: 'var(--mm-bg)',
-                      color: 'var(--mm-text)',
-                      boxShadow: 'var(--mm-float)',
-                    }}
-                  />
-                )}
-                <Tooltip title={favoriteIds.includes(m.id) ? '取消收藏' : '收藏'}>
-                  <IconButton
-                    size="small"
-                    aria-label={favoriteIds.includes(m.id) ? '取消收藏' : '收藏'}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(m);
-                    }}
-                    sx={{
-                      position: 'absolute',
-                      top: 10,
-                      right: 10,
-                      bgcolor: 'var(--mm-bg)',
-                      color: favoriteIds.includes(m.id) ? mm.warning : 'var(--mm-text)',
-                      boxShadow: 'var(--mm-float)',
-                      '&:hover': { bgcolor: 'var(--mm-bg)' },
-                    }}
-                  >
-                    {favoriteIds.includes(m.id) ? (
-                      <StarRoundedIcon fontSize="small" />
-                    ) : (
-                      <StarBorderRoundedIcon fontSize="small" />
-                    )}
-                  </IconButton>
-                </Tooltip>
-              </Box>
-              <CardContent sx={{ px: 2.5, pt: 2.25, pb: 2.5 }}>
-                <Typography variant="subtitle1" fontWeight={700} noWrap>
-                  {m.name}
-                </Typography>
-                <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 0.5 }}>
-                  <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 140 }}>
-                    {m.directedBy ? `导演：${m.directedBy}` : '未知导演'}
-                  </Typography>
-                  <Rating value={Number(m.rate) || 0} readOnly size="small" precision={0.1} sx={{ color: mm.warning }} />
-                </Stack>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: 34, mt: 0.5 }}
-                >
-                  {m.abs || '暂无简介'}
-                </Typography>
-              </CardContent>
-            </Card>
+              movie={m}
+              isFavorite={favoriteIds.includes(m.id)}
+              onOpen={() => router.push(`/content/movie/${m.id}`)}
+              onToggleFavorite={() => toggleFavorite(m)}
+            />
           ))}
         </Box>
       )}
 
-      {total > 0 && view !== 'recent' && (
+      {total > 0 && view !== 'recent' && view !== 'online' && (
         <Stack direction="row" justifyContent="center" alignItems="center" spacing={2} sx={{ mt: 4 }}>
           <Button variant="outlined" startIcon={<ChevronLeftRoundedIcon />} disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
             上一页
@@ -492,19 +622,131 @@ export default function VideoViewPage() {
           </Button>
         </Stack>
       )}
+
     </Box>
   );
 }
 
-function sortMovies(list: MovieItem[], order: string) {
-  const copy = [...list];
-  if (order === 'rating') copy.sort((a, b) => (b.rate || 0) - (a.rate || 0));
-  else if (order === 'year')
-    copy.sort((a, b) => {
-      const da = a.showTime ? new Date(a.showTime).getTime() : 0;
-      const db = b.showTime ? new Date(b.showTime).getTime() : 0;
-      return db - da;
-    });
-  else copy.sort((a, b) => a.name.localeCompare(b.name));
-  return copy;
+/** 影片卡片（普通网格与「最近」两个分区共用） */
+function MovieCard({
+  movie,
+  isFavorite,
+  onOpen,
+  onToggleFavorite,
+}: {
+  movie: MovieItem;
+  isFavorite: boolean;
+  onOpen: () => void;
+  onToggleFavorite: () => void;
+}) {
+  const { mm } = useTheme();
+  return (
+    <Card
+      className="mm-hover-lift"
+      onClick={() => onOpen()}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      sx={{
+        position: 'relative',
+        aspectRatio: '2 / 3',
+        borderRadius: 'var(--mm-radius-lg)',
+        overflow: 'hidden',
+        cursor: 'pointer',
+      }}
+    >
+      <CoverImage
+        src={movie.pic}
+        alt={movie.name}
+        sx={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          display: 'block',
+          bgcolor: 'var(--mm-sunken)',
+        }}
+      />
+
+      {/* 片名 / 导演：叠在海报上层 */}
+      <Box
+        sx={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          px: 1.75,
+          pt: 4,
+          pb: 1.5,
+          background: 'var(--mm-scrim)',
+          color: 'var(--mm-scrim-text)',
+        }}
+      >
+        <Typography variant="subtitle2" sx={{ fontWeight: 800, lineHeight: 1.35 }} noWrap>
+          {movie.name}
+        </Typography>
+        <Typography variant="caption" noWrap sx={{ display: 'block', opacity: 0.85 }}>
+          {movie.directedBy || '未知导演'}
+        </Typography>
+      </Box>
+
+      {/* 收藏 */}
+      <Tooltip title={isFavorite ? '取消收藏' : '收藏'}>
+        <IconButton
+          size="small"
+          aria-label={isFavorite ? '取消收藏' : '收藏'}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite();
+          }}
+          sx={{
+            position: 'absolute',
+            top: 10,
+            right: 10,
+            bgcolor: 'var(--mm-bg)',
+            color: isFavorite ? mm.warning : 'var(--mm-text)',
+            boxShadow: 'var(--mm-float)',
+            '&:hover': { bgcolor: 'var(--mm-bg)' },
+          }}
+        >
+          {isFavorite ? <StarRoundedIcon fontSize="small" /> : <StarBorderRoundedIcon fontSize="small" />}
+        </IconButton>
+      </Tooltip>
+    </Card>
+  );
+}
+
+/** 「最近」里的一个分区：小标题 + 两列卡片网格 */
+function RecentColumn({
+  title,
+  emptyText,
+  icon,
+  children,
+}: {
+  title: string;
+  emptyText: string;
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  const count = Children.count(children);
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>
+        {title}
+      </Typography>
+      {count === 0 ? (
+        <EmptyState icon={icon} title={emptyText} minHeight={180} />
+      ) : (
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 2 }}>
+          {children}
+        </Box>
+      )}
+    </Box>
+  );
 }

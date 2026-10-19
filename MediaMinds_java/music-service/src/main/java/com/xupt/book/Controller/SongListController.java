@@ -29,7 +29,8 @@ public class SongListController {
     @PostMapping
     public Result<?> addSongList(@RequestBody SongList songList) {
         boolean res = songListService.addSongList(songList);
-        return res ? Result.success("添加成功") : Result.error("添加失败");
+        // 返回实体（含自增 id），前端随后要用它上传封面
+        return res ? Result.success(songList) : Result.error("添加失败");
     }
 
     @Operation(summary = "查询所有歌单", description = "分页查询所有歌单信息")

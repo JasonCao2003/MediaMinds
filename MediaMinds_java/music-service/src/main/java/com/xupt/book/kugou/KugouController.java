@@ -27,13 +27,18 @@ public class KugouController {
 
     // ================= 搜索 =================
 
-    @Operation(summary = "搜索歌曲", description = "调用酷狗接口按关键词搜索歌曲")
+    @Operation(summary = "在线搜索", description = "按维度搜索酷狗：song（歌曲）/ singer（歌手）/ album（专辑）")
     @GetMapping("/search")
     public Result<?> search(
             @Parameter(description = "关键词") @RequestParam String keyword,
+            @Parameter(description = "搜索维度：song / singer / album") @RequestParam(defaultValue = "song") String type,
             @Parameter(description = "页码，默认1") @RequestParam(defaultValue = "1") int page,
             @Parameter(description = "每页条数，默认30") @RequestParam(defaultValue = "30") int size) {
-        return Result.success(kugouService.searchSongs(keyword, page, size));
+        return switch (type) {
+            case "singer" -> Result.success(kugouService.searchSingers(keyword, page, size));
+            case "album" -> Result.success(kugouService.searchAlbums(keyword, page, size));
+            default -> Result.success(kugouService.searchSongs(keyword, page, size));
+        };
     }
 
     // ================= 播放 / 歌词 =================
@@ -46,6 +51,20 @@ public class KugouController {
             @Parameter(description = "album_audio_id") @RequestParam(required = false) String albumAudioId,
             @Parameter(description = "album_id") @RequestParam(required = false) String albumId) {
         return Result.success(kugouService.resolvePlayUrl(hash, quality, albumAudioId, albumId));
+    }
+
+    @Operation(summary = "按歌曲刷新播放直链",
+            description = "用本地 song 里存的酷狗 hash 重新取播放地址并回写；直链过期后播放前调用")
+    @PostMapping("/url/by-song")
+    public Result<?> refreshUrlBySong(
+            @Parameter(description = "本地歌曲 ID", required = true) @RequestParam Integer songId) {
+        try {
+            return Result.success(kugouService.refreshSongUrl(songId));
+        } catch (IllegalArgumentException e) {
+            return Result.error(400, e.getMessage());
+        } catch (Exception e) {
+            return Result.error(500, e.getMessage());
+        }
     }
 
     @Operation(summary = "获取歌词", description = "根据 hash 获取并解码酷狗歌词（KRC/LRC）")
@@ -126,6 +145,21 @@ public class KugouController {
     @GetMapping("/login/qr/status")
     public Result<?> qrStatus(@Parameter(description = "二维码 key") @RequestParam String key) {
         return Result.success(kugouService.qrStatus(key));
+    }
+
+    @Operation(summary = "退出酷狗登录", description = "清空内存与数据库里的登录态")
+    @PostMapping("/logout")
+    public Result<?> logout() {
+        kugouService.logout();
+        return Result.success();
+    }
+
+    @Operation(summary = "酷狗登录状态", description = "返回是否已登录及 userid")
+    @GetMapping("/login/status")
+    public Result<?> loginStatus() {
+        return Result.success(Map.of(
+                "loggedIn", kugouService.isLoggedIn(),
+                "userId", kugouService.currentUserId()));
     }
 
     // ================= 导入本地曲库 =================

@@ -60,6 +60,6 @@ public interface SongListMapper extends BaseMapper<SongList> {
      * @param songList 歌单对象
      * @return 更新的记录数
      */
-    @Update("update song_list set pic = #{pic} where id = #{id}")
+    @Update("update song_list set pic = #{songList.pic} where id = #{songList.id}")
     int updateSongListImg(@Param("songList") SongList songList);
 }

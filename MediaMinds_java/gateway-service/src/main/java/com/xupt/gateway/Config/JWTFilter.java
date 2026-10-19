@@ -24,8 +24,7 @@ public class JWTFilter implements GlobalFilter, Ordered {
     private static final List<String> EXCLUDED_PATHS = Arrays.asList(
             "/v1/auth/login/accountLogin",
             "/v1/auth/login/emailLogin",
-            "/v1/auth/login/sendValidation",
-            "/v1/auth/user/register"
+            "/v1/auth/login/sendValidation"
     );
 
     @Override

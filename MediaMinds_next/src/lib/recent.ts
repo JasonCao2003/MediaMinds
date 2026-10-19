@@ -90,6 +90,23 @@ export function clearRecent(kind: RecentKind) {
   writeStore(store);
 }
 
+/**
+ * 删除某一条记录。
+ *
+ * <p>内容本体被删除后，本地的「最近观看 / 播放」快照不会自动消失；
+ * 打开详情或删除时发现 404，就用它把残留项清掉。
+ */
+export function removeRecent(kind: RecentKind, id: string | number) {
+  const target = String(id);
+  const store = readStore();
+  const list = store[kind];
+  if (!list || list.length === 0) return;
+  const next = list.filter((item) => item.id !== target);
+  if (next.length === list.length) return;
+  store[kind] = next;
+  writeStore(store);
+}
+
 /** 时间戳 → 「刚刚 / 3 分钟前 / 2 天前 / 10 月 16 日」 */
 export function relativeTime(at: number): string {
   const diff = Date.now() - at;

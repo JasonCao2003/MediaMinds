@@ -3,6 +3,12 @@ server:
 spring:
   application:
     name: music-service
+  # 上传：歌曲音频 / 歌单封面。默认单文件只有 1MB，封面稍大就会 413（“上传失败”）
+  servlet:
+    multipart:
+      max-file-size: 200MB
+      max-request-size: 210MB
+      file-size-threshold: 2MB
   # MySQL
   datasource:
     url: jdbc:mysql://localhost:3306/music_data?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=UTF-8&useSSL=false

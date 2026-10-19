@@ -13,7 +13,6 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,13 +20,18 @@ import java.util.Map;
 /**
  * 豆瓣书源 HTTP 客户端。
  *
- * 搜索：抓取 {@code https://book.douban.com/subject_search} 页面内嵌的 {@code window.__DATA__} JSON；
- * 详情：调用 m 站 rexxar 接口 {@code https://m.douban.com/rexxar/api/v2/book/{id}}（需携带 Referer）。
+ * 搜索与详情都走 m 站 rexxar 接口（需携带 Referer {@code https://m.douban.com/}）。
+ *
+ * <p>历史实现是抓 {@code book.douban.com/subject_search} 页面里的 {@code window.__DATA__}，
+ * 该页面结构已变更、永远解析不到结果，故改为 rexxar。
  */
 @Service
 public class DoubanClient {
 
-    private static final String SEARCH_URL = "https://book.douban.com/subject_search";
+    private static final String SEARCH_URL = "https://m.douban.com/rexxar/api/v2/search";
+    private static final String MOBILE_REFERER = "https://m.douban.com/";
+    /** 单次请求条数（rexxar 上限 20） */
+    private static final int SEARCH_COUNT = 20;
     private static final String DETAIL_URL = "https://m.douban.com/rexxar/api/v2/book/";
     private static final String USER_AGENT =
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
@@ -41,39 +45,56 @@ public class DoubanClient {
             .followRedirects(HttpClient.Redirect.ALWAYS)
             .build();
 
-    /** 搜索图书，返回页面内嵌的 subject 列表（原始条目） */
-    public List<Map<String, Object>> search(String query) {
-        String url = SEARCH_URL + "?search_text=" + urlEncode(query) + "&cat=1001";
-        String html = getText(url, "https://book.douban.com/");
-        String json = extractDataJson(html);
-        if (json == null) {
-            return Collections.emptyList();
-        }
+    /** 搜索图书（rexxar），{@code start} 用于翻页 */
+    public List<Map<String, Object>> search(String query, int start) {
+        String url = SEARCH_URL
+                + "?q=" + urlEncode(query)
+                + "&type=book&count=" + SEARCH_COUNT
+                + "&start=" + Math.max(0, start);
+        String body = getText(url, MOBILE_REFERER);
         try {
-            JsonNode node = objectMapper.readTree(json);
-            JsonNode items = node.path("items");
+            JsonNode items = objectMapper.readTree(body).path("subjects").path("items");
             List<Map<String, Object>> books = new ArrayList<>();
-            if (items.isArray()) {
-                for (JsonNode item : items) {
-                    String subjectUrl = item.path("url").asText("");
-                    if (!subjectUrl.contains("/subject/")) {
-                        continue; // 过滤掉作者 / 丛书等条目
-                    }
-                    Map<String, Object> book = new LinkedHashMap<>();
-                    book.put("id", item.path("id").asLong(0));
-                    book.put("title", item.path("title").asText(""));
-                    book.put("abstract", item.path("abstract").asText(""));
-                    book.put("cover", item.path("cover_url").asText(""));
-                    book.put("rating", item.path("rating").path("value").asDouble(0));
-                    book.put("ratingCount", item.path("rating").path("count").asInt(0));
-                    book.put("url", subjectUrl);
-                    books.add(book);
+            if (!items.isArray()) {
+                return books;
+            }
+            for (JsonNode item : items) {
+                JsonNode target = item.path("target");
+                long id = target.path("id").asLong(0);
+                String title = target.path("title").asText("");
+                if (id <= 0 || title.isEmpty()) {
+                    continue;
                 }
+                Map<String, Object> book = new LinkedHashMap<>();
+                book.put("id", id);
+                book.put("title", title);
+                book.put("abstract", reorderCardSubtitle(target.path("card_subtitle").asText("")));
+                book.put("cover", target.path("cover_url").asText(""));
+                book.put("rating", target.path("rating").path("value").asDouble(0));
+                book.put("ratingCount", target.path("rating").path("count").asInt(0));
+                book.put("url", "https://book.douban.com/subject/" + id + "/");
+                books.add(book);
             }
             return books;
         } catch (Exception e) {
             throw new IllegalStateException("豆瓣搜索结果解析失败: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * rexxar 的 {@code card_subtitle} 是「作者 / 年份 / 出版社」，
+     * 而 {@code DoubanService.normalize} 按「作者 / 出版社 / 年份」解析 abstract，这里重排成后者的顺序。
+     */
+    private static String reorderCardSubtitle(String cardSubtitle) {
+        String[] parts = cardSubtitle == null ? new String[0] : cardSubtitle.split("\\s*/\\s*");
+        String author = parts.length > 0 ? parts[0].trim() : "";
+        String year = parts.length > 1 ? parts[1].trim() : "";
+        String publisher = parts.length > 2 ? parts[2].trim() : "";
+        List<String> ordered = new ArrayList<>();
+        if (!author.isEmpty()) ordered.add(author);
+        if (!publisher.isEmpty()) ordered.add(publisher);
+        if (!year.isEmpty()) ordered.add(year);
+        return String.join(" / ", ordered);
     }
 
     /** 图书详情（rexxar 接口） */
@@ -84,25 +105,6 @@ public class DoubanClient {
         } catch (IOException e) {
             throw new IllegalStateException("豆瓣详情解析失败: " + e.getMessage(), e);
         }
-    }
-
-    /** 从 HTML 中提取 window.__DATA__ = {...} 的 JSON 主体 */
-    private String extractDataJson(String html) {
-        int marker = html.indexOf("window.__DATA__");
-        if (marker < 0) {
-            return null;
-        }
-        int eq = html.indexOf('=', marker);
-        int braceStart = html.indexOf('{', eq);
-        int scriptEnd = html.indexOf("</script>", braceStart);
-        if (braceStart < 0 || scriptEnd < 0) {
-            return null;
-        }
-        String json = html.substring(braceStart, scriptEnd).trim();
-        if (json.endsWith(";")) {
-            json = json.substring(0, json.length() - 1);
-        }
-        return json;
     }
 
     private String getText(String url, String referer) {

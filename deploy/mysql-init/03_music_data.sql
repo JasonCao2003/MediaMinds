@@ -173,6 +173,10 @@ CREATE TABLE `song` (
                         `pic` varchar(255) DEFAULT NULL,
                         `lyric` text,
                         `url` varchar(255) NOT NULL,
+                        `kugou_hash` varchar(64) DEFAULT NULL COMMENT '酷狗 hash（按需刷新播放直链）',
+                        `kugou_album_id` varchar(64) DEFAULT NULL COMMENT '酷狗 album_id',
+                        `kugou_album_audio_id` varchar(64) DEFAULT NULL COMMENT '酷狗 album_audio_id',
+                        `source` varchar(16) DEFAULT NULL COMMENT '数据来源：kugou / manual',
                         PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=124 DEFAULT CHARSET=utf8mb3;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -224,3 +228,21 @@ UNLOCK TABLES;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2025-05-12 19:14:22
+
+--
+-- 酷狗登录态（单行表；启动时读回、登录后 upsert）
+--
+CREATE TABLE IF NOT EXISTS `kugou_auth` (
+    `id`            tinyint      NOT NULL COMMENT '固定为 1（单行表）',
+    `token`         varchar(255) DEFAULT NULL COMMENT '酷狗登录 token',
+    `userid`        varchar(64)  DEFAULT NULL COMMENT '酷狗 userid',
+    `dfid`          varchar(128) DEFAULT NULL COMMENT '设备指纹',
+    `vip_token`     varchar(255) DEFAULT NULL COMMENT 'VIP token',
+    `vip_type`      varchar(16)  DEFAULT NULL COMMENT 'VIP 类型',
+    `refresh_token` varchar(255) DEFAULT NULL COMMENT '刷新 token（预留）',
+    `update_time`   datetime     DEFAULT NULL COMMENT '最近更新',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='酷狗登录态（单行）';
+
+INSERT INTO `kugou_auth` (`id`) VALUES (1)
+ON DUPLICATE KEY UPDATE `id` = `id`;

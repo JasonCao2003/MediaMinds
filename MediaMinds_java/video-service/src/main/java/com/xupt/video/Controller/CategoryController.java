@@ -75,7 +75,10 @@ public class CategoryController {
     public Result<Page<Movie>> getMoviesByCategoryId(
             @Parameter(description = "分类ID", required = true, example = "1") @PathVariable Long id,
             @Parameter(description = "当前页码，默认1", example = "1") @RequestParam(defaultValue = "1") int page,
-            @Parameter(description = "每页记录数，默认10", example = "10") @RequestParam(defaultValue = "10") int size) {
-        return categoryService.getMoviesByCategoryId(id, page, size);
+            @Parameter(description = "每页记录数，默认10", example = "10") @RequestParam(defaultValue = "10") int size,
+            @Parameter(description = "排序字段：createTime / name / rate / showTime")
+            @RequestParam(required = false) String sortField,
+            @Parameter(description = "排序方向：asc / desc") @RequestParam(required = false) String sortOrder) {
+        return categoryService.getMoviesByCategoryId(id, page, size, sortField, sortOrder);
     }
 } 

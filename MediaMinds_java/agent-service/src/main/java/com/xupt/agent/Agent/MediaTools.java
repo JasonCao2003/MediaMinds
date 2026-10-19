@@ -67,15 +67,15 @@ public class MediaTools {
     // 入库
     // ============================================================
 
-    @Tool("把已经检索到的候选项批量入库，只写入元数据。"
+    @Tool("把已经检索到的候选项批量收藏：先把元数据写入本地库，再加入收藏。"
             + "indexes 是候选序号，从 1 开始、按界面从上到下计数，多个用英文逗号分隔，例如 1,3,5；"
-            + "传 all 表示把当前全部候选入库。")
+            + "传 all 表示把当前全部候选收藏。")
     public String importCandidates(@ToolMemoryId String sessionId,
                                    @P("候选序号，如 1,3,5 或 all") String indexes) {
         // 优先本轮检索结果；若本轮只说了「入库」，则回退到会话中上一轮的候选
         List<Candidate> flat = collector.resolve(sessionId);
         if (flat.isEmpty()) {
-            return "当前没有可入库的候选项，请先检索再入库。";
+            return "当前没有可收藏的候选项，请先检索再收藏。";
         }
         String raw = Values.str(indexes).trim();
         List<Candidate> picked = new ArrayList<>();
@@ -101,7 +101,7 @@ public class MediaTools {
             return "序号无效，当前共有 " + flat.size() + " 条候选，请给出 1 到 " + flat.size() + " 之间的序号。";
         }
         Map<String, Object> result = importer.importItems(picked);
-        return "入库完成：成功 " + result.get("importedCount") + " 条，失败 " + result.get("failedCount") + " 条。";
+        return "收藏完成：成功 " + result.get("importedCount") + " 条（已写入本地库），失败 " + result.get("failedCount") + " 条。";
     }
 
     // ============================================================

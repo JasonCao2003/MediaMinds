@@ -48,7 +48,8 @@ export const addSongService = (songData: Record<string, unknown>, file?: File) =
   const formData = new FormData();
   formData.append('song', JSON.stringify(songData));
   if (file) formData.append('file', file);
-  return request.post<ApiResult<void>>('/v1/music/songs', formData, {
+  // 后端返回的是新建的实体（含自增 id），前端随后要用它上传封面
+  return request.post<ApiResult<Song>>('/v1/music/songs', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 };
@@ -93,7 +94,7 @@ export const getSingersByNameService = (name: string, params: Record<string, unk
   });
 
 export const addSingerService = (data: Partial<Singer>) =>
-  request.post<ApiResult<void>>('/v1/music/singer', data);
+  request.post<ApiResult<Singer>>('/v1/music/singer', data);
 
 export const updateSingerService = (data: Partial<Singer>) =>
   request.put<ApiResult<void>>('/v1/music/singer', data);
@@ -130,7 +131,7 @@ export const getSongListByStyleService = (style: string, params: Record<string, 
   });
 
 export const addSongListService = (data: Partial<SongList>) =>
-  request.post<ApiResult<void>>('/v1/music/song-list', data);
+  request.post<ApiResult<SongList>>('/v1/music/song-list', data);
 
 export const updateSongListService = (id: number | string, data: Partial<SongList>) =>
   request.put<ApiResult<void>>(`/v1/music/song-list/${id}`, data);
@@ -167,6 +168,15 @@ export const updateListSongService = (data: Record<string, unknown>) =>
 
 export const deleteListSongService = (id: number | string) =>
   request.delete<ApiResult<unknown>>(`/v1/music/listSong/${id}`);
+
+/** 把某首歌从指定歌单移除（只影响这个歌单） */
+export const removeSongFromSongListService = (
+  songListId: number | string,
+  songId: number | string,
+) =>
+  request.delete<ApiResult<unknown>>('/v1/music/listSong/remove', {
+    params: { songListId, songId },
+  });
 
 // ================== 评论管理 ==================
 

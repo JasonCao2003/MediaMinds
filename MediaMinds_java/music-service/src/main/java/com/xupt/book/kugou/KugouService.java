@@ -25,13 +25,15 @@ public class KugouService {
 
     private final KugouApiClient api;
     private final KugouProperties props;
+    private final KugouAuthStore authStore;
     private final SongMapper songMapper;
     private final SingerMapper singerMapper;
 
-    public KugouService(KugouApiClient api, KugouProperties props,
+    public KugouService(KugouApiClient api, KugouProperties props, KugouAuthStore authStore,
                         SongMapper songMapper, SingerMapper singerMapper) {
         this.api = api;
         this.props = props;
+        this.authStore = authStore;
         this.songMapper = songMapper;
         this.singerMapper = singerMapper;
     }
@@ -54,6 +56,49 @@ public class KugouService {
         result.put("total", raw.path("data").path("total").asInt(songs.size()));
         result.put("songs", songs);
         result.put("raw", raw);
+        return result;
+    }
+
+    /** 搜索歌手（msearch 返回 data 直接是数组，且不含头像） */
+    public Map<String, Object> searchSingers(String keyword, int page, int size) {
+        JsonNode raw = api.searchSinger(keyword, page, size);
+        List<Map<String, Object>> singers = new ArrayList<>();
+        JsonNode arr = raw.path("data");
+        if (arr.isArray()) {
+            for (JsonNode item : arr) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", pick(item, "singerid", "SingerId", "singer_id"));
+                m.put("name", pick(item, "singername", "SingerName", "name"));
+                singers.add(m);
+            }
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("total", singers.size());
+        result.put("singers", singers);
+        return result;
+    }
+
+    /** 搜索专辑（msearch 返回 data.info[]） */
+    public Map<String, Object> searchAlbums(String keyword, int page, int size) {
+        JsonNode raw = api.searchAlbum(keyword, page, size);
+        JsonNode data = raw.path("data");
+        List<Map<String, Object>> albums = new ArrayList<>();
+        JsonNode info = data.path("info");
+        if (info.isArray()) {
+            for (JsonNode item : info) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", pick(item, "albumid", "AlbumID", "album_id"));
+                m.put("name", pick(item, "albumname", "AlbumName", "album_name"));
+                m.put("singer", pick(item, "singername", "SingerName"));
+                m.put("songCount", item.path("songcount").asInt(item.path("SongCount").asInt(0)));
+                m.put("publishTime", pick(item, "publishtime", "PublishTime"));
+                m.put("image", normalizeImage(pick(item, "imgurl", "Image", "image")));
+                albums.add(m);
+            }
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("total", data.path("total").asInt(albums.size()));
+        result.put("albums", albums);
         return result;
     }
 
@@ -168,7 +213,9 @@ public class KugouService {
     }
 
     public JsonNode loginByMobile(String mobile, String code) {
-        return api.loginByMobile(mobile, code);
+        JsonNode response = api.loginByMobile(mobile, code);
+        applyLoginState(response);
+        return response;
     }
 
     public JsonNode qrKey() {
@@ -176,7 +223,63 @@ public class KugouService {
     }
 
     public JsonNode qrStatus(String key) {
-        return api.checkQrStatus(key);
+        JsonNode response = api.checkQrStatus(key);
+        applyLoginState(response);
+        return response;
+    }
+
+    /**
+     * 把登录接口返回的 token / userid / dfid / vip 信息写回进程内配置，
+     * 后续搜索、播放直链、导入请求会立即带上登录态。
+     */
+    private void applyLoginState(JsonNode response) {
+        if (response == null) {
+            return;
+        }
+        JsonNode data = response.path("data");
+        if (data.isMissingNode() || !data.isObject()) {
+            return;
+        }
+        String token = text(data, "token", "user_token");
+        if (token == null || token.isBlank()) {
+            return;
+        }
+        String userId = text(data, "userid", "user_id");
+        String dfid = text(data, "dfid");
+        String vipToken = text(data, "vip_token", "viptoken");
+        String vipType = text(data, "vip_type", "viptype");
+        String refreshToken = text(data, "refresh_token", "refreshtoken");
+        props.updateLoginState(token, userId, dfid, vipToken, vipType);
+        // 落库，重启后自动恢复
+        authStore.save(token, userId, dfid, vipToken, vipType, refreshToken);
+    }
+
+    /** 退出登录：清空内存与持久化的登录态 */
+    public void logout() {
+        authStore.clear();
+    }
+
+    /** 当前是否已登录 */
+    public boolean isLoggedIn() {
+        return props.getToken() != null && !props.getToken().isBlank();
+    }
+
+    /** 当前登录的 userid（未登录为 0） */
+    public String currentUserId() {
+        return props.getUserId();
+    }
+
+    private static String text(JsonNode node, String... keys) {
+        for (String key : keys) {
+            JsonNode value = node.path(key);
+            if (!value.isMissingNode() && !value.isNull()) {
+                String text = value.asText("");
+                if (!text.isBlank()) {
+                    return text;
+                }
+            }
+        }
+        return null;
     }
 
     // ============================================================
@@ -194,6 +297,24 @@ public class KugouService {
         }
 
         Integer singerId = ensureSinger(singerName, image);
+
+        // 同一首歌（同名 + 同歌手）只入库一次：重复导入（比如「加入歌单」前先导入）直接复用
+        Song existing = songMapper.selectOne(new QueryWrapper<Song>()
+                .eq("name", name)
+                .eq("singer_id", singerId)
+                .last("LIMIT 1"));
+        if (existing != null) {
+            // 老数据可能没有酷狗源信息，补上后播放时就能按需刷新直链
+            if (existing.getKugouHash() == null || existing.getKugouHash().isBlank()) {
+                existing.setKugouHash(hash);
+                existing.setKugouAlbumId(blankToNull(albumId));
+                existing.setKugouAlbumAudioId(blankToNull(albumAudioId));
+                existing.setSource("kugou");
+                existing.setUpdateTime(new Date());
+                songMapper.updateById(existing);
+            }
+            return existing;
+        }
 
         String lyric = "";
         try {
@@ -216,10 +337,55 @@ public class KugouService {
         song.setLyric(lyric);
         song.setPic(pic);
         song.setUrl(url);
+        song.setKugouHash(hash);
+        song.setKugouAlbumId(blankToNull(albumId));
+        song.setKugouAlbumAudioId(blankToNull(albumAudioId));
+        song.setSource("kugou");
         song.setCreateTime(new Date());
         song.setUpdateTime(new Date());
         songMapper.insert(song);
         return song;
+    }
+
+    /**
+     * 按歌曲 ID 重新解析酷狗播放直链并回写 song.url。
+     *
+     * <p>直链带时效，登录 / 会员状态变化后需要重新取；前端在播放前调用。
+     */
+    public String refreshSongUrl(Integer songId) {
+        if (songId == null) {
+            throw new IllegalArgumentException("歌曲 ID 不能为空");
+        }
+        Song song = songMapper.selectById(songId);
+        if (song == null) {
+            throw new IllegalArgumentException("歌曲不存在");
+        }
+        if (song.getKugouHash() == null || song.getKugouHash().isBlank()) {
+            throw new IllegalStateException("该歌曲没有酷狗源信息，无法刷新播放地址");
+        }
+        String url;
+        try {
+            JsonNode raw = api.getPlayUrl(song.getKugouHash(), "128",
+                    nvl(song.getKugouAlbumAudioId()), nvl(song.getKugouAlbumId()));
+            url = extractPlayUrl(raw);
+        } catch (Exception e) {
+            throw new IllegalStateException("获取播放地址失败：" + e.getMessage());
+        }
+        if (url == null || url.isEmpty()) {
+            throw new IllegalStateException("该曲目暂时拿不到播放地址（可能需要酷狗会员或重新登录）");
+        }
+        song.setUrl(url);
+        song.setUpdateTime(new Date());
+        songMapper.updateById(song);
+        return url;
+    }
+
+    private static String nvl(String value) {
+        return value == null || value.isBlank() ? "0" : value;
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private String resolveAndStoreAudio(String hash, String albumId, String albumAudioId) {

@@ -23,12 +23,6 @@ public class UserController {
     @Resource
     private UserService userService;
 
-    // 注册用户
-    @PostMapping("/register")
-    public Result<?> register(@RequestBody @Valid User user) {
-        return userService.addUser(user);
-    }
-
     // 查找用户
     @GetMapping("/getUser")
     public Result<?> getUser() {

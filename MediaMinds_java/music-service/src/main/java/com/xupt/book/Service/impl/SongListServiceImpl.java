@@ -1,6 +1,7 @@
 package com.xupt.book.Service.impl;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.xupt.book.Mapper.ListSongMapper;
 import com.xupt.book.Mapper.SongListMapper;
 import com.xupt.book.Pojo.SongList;
 import com.xupt.book.Service.SongListService;
@@ -13,6 +14,9 @@ public class SongListServiceImpl implements SongListService {
     @Resource
     private SongListMapper songListMapper;
 
+    @Resource
+    private ListSongMapper listSongMapper;
+
     @Override
     public boolean updateSongListMsg(SongList songList) {
         return songListMapper.updateById(songList) > 0;
@@ -20,6 +24,8 @@ public class SongListServiceImpl implements SongListService {
 
     @Override
     public boolean deleteSongList(Integer id) {
+        // 先清歌单-歌曲关联，避免留下孤儿记录
+        listSongMapper.deleteBySongListId(id);
         return songListMapper.deleteSongList(id) > 0;
     }
 

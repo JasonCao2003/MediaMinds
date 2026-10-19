@@ -1,372 +1,563 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Avatar,
   Box,
   Button,
   Card,
-  CardContent,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   IconButton,
-  InputAdornment,
   List,
   ListItem,
   ListItemAvatar,
   ListItemButton,
   ListItemText,
   Stack,
-  Tab,
-  Tabs,
-  TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
-import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
-import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
+import PlaylistAddRoundedIcon from '@mui/icons-material/PlaylistAddRounded';
+import FavoriteBorderRoundedIcon from '@mui/icons-material/FavoriteBorderRounded';
 import LyricsRoundedIcon from '@mui/icons-material/LyricsRounded';
 import MusicNoteRoundedIcon from '@mui/icons-material/MusicNoteRounded';
+import AlbumRoundedIcon from '@mui/icons-material/AlbumRounded';
+import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import EmptyState from '@/components/common/EmptyState';
+import CoverImage from '@/components/common/CoverImage';
 import { toast } from '@/lib/notify';
+import { addCollectionService } from '@/api/music';
 import { usePlayerStore } from '@/stores/playerStore';
 import {
-  searchKugouSongsService,
+  searchKugouService,
   getKugouPlayUrlService,
   getKugouLyricService,
-  getKugouRankListService,
-  getKugouRankAudioService,
-  getKugouRankTopService,
   importKugouSongService,
+  type KugouDimension,
 } from '@/api/kugou';
 
 interface KugouSong {
   hash?: string;
-  hash_128?: string;
   name?: string;
   singer?: string;
   album?: string;
   albumId?: string | number;
   albumAudioId?: string | number;
-  audioId?: string | number;
   image?: string;
   duration?: number;
-  // 兼容旧字段
-  audio_id?: number;
-  album_audio_id?: number;
-  album_id?: number;
-  filename?: string;
-  songname?: string;
-  singername?: string;
-  [key: string]: unknown;
 }
 
-interface KugouRank {
-  rankId: string;
-  rankName: string;
-  rankCid: number;
+interface KugouSinger {
+  id?: string;
+  name?: string;
+}
+
+interface KugouAlbum {
+  id?: string;
+  name?: string;
+  singer?: string;
+  songCount?: number;
+  publishTime?: string;
   image?: string;
 }
 
-/** 把搜索/榜单接口的歌曲统一成前端可用结构 */
-function normalizeKugouSong(raw: Record<string, unknown>): KugouSong {
-  const s = raw as KugouSong;
+/** 酷狗返回结构层级不一，逐层兜底取出 */
+function normalizeSong(raw: Record<string, unknown>): KugouSong {
   const audioInfo = (raw.audio_info ?? {}) as Record<string, unknown>;
   const albumInfo = (raw.album_info ?? {}) as Record<string, unknown>;
-  const hash =
-    (s.hash as string) ||
-    (s.hash_128 as string) ||
-    (audioInfo.hash_128 as string) ||
-    (audioInfo.hash_320 as string) ||
-    (audioInfo.hash_flac as string) ||
-    '';
   return {
-    hash,
-    name: (s.name as string) || (s.songname as string) || (s.filename as string) || '未知歌曲',
-    singer: (s.singer as string) || (s.singername as string) || (raw.author_name as string) || '未知歌手',
-    album: (s.album as string) || (albumInfo.album_name as string) || '',
-    albumId: (s.albumId as string) ?? (s.album_id as number) ?? (raw.album_id as number),
-    albumAudioId: (s.albumAudioId as string) ?? (s.album_audio_id as number) ?? (raw.album_audio_id as number),
-    audioId: (s.audioId as string) ?? (s.audio_id as number) ?? (raw.audio_id as number),
-    image:
-      (s.image as string) ||
-      (albumInfo.sizable_cover as string) ||
-      (raw.cover as string) ||
+    hash:
+      (raw.hash as string) ||
+      (raw.hash_128 as string) ||
+      (audioInfo.hash_128 as string) ||
       '',
-    duration: (s.duration as number) || Number(raw.duration ?? 0) || 0,
+    name: (raw.name as string) || (raw.songname as string) || (raw.filename as string) || '未知歌曲',
+    singer: (raw.singer as string) || (raw.singername as string) || (raw.author_name as string) || '未知歌手',
+    album: (raw.album as string) || (raw.album_name as string) || (albumInfo.album_name as string) || '',
+    albumId: (raw.albumId as string) ?? (raw.album_id as string | number) ?? undefined,
+    albumAudioId: (raw.albumAudioId as string) ?? (raw.album_audio_id as string | number) ?? undefined,
+    image: (raw.image as string) || (raw.img as string) || '',
+    duration: Number(raw.duration ?? 0) || 0,
   };
 }
 
-/** 榜单列表归一化：rank/top 在 data.list，rank/list 在 data.info */
-function normalizeRanks(res: unknown, path: 'list' | 'info'): KugouRank[] {
-  const d = (res as { data?: unknown })?.data as Record<string, unknown> | undefined;
-  const inner = (d?.data ?? {}) as Record<string, unknown>;
-  const arr = inner[path];
-  if (!Array.isArray(arr)) return [];
-  return arr
-    .map((item) => {
-      const r = item as Record<string, unknown>;
-      const rankId = r.rankid ?? r.rankId ?? r.id;
-      if (rankId == null) return null;
-      return {
-        rankId: String(rankId),
-        rankName: String(r.rankname ?? r.rankName ?? '榜单'),
-        rankCid: Number(r.rank_cid ?? r.rankCid ?? 0),
-        image: String(r.img_9 ?? r.banner_9 ?? r.img ?? ''),
-      } as KugouRank;
-    })
-    .filter((x): x is KugouRank => x !== null);
-}
+/** 单页条数：返回条数少于它即视为没有更多 */
+const PAGE_SIZE = 30;
 
-export default function KugouPanel() {
-  const { play } = usePlayerStore();
-  const [tab, setTab] = useState<'search' | 'rank'>('search');
-  const [keyword, setKeyword] = useState('');
+/**
+ * 酷狗在线结果面板（**受页面工具栏驱动**）。
+ *
+ * 搜索关键词与维度都由外层传入——工具栏里的搜索框和筛选下拉就是它的输入，
+ * 面板自己不再有搜索框，避免页面上出现两组搜索。
+ */
+export default function KugouPanel({
+  keyword,
+  dimension,
+  nonce,
+  onSearchByName,
+  onImported,
+  onAddToPlaylist,
+}: {
+  keyword: string;
+  dimension: KugouDimension;
+  /** 每次点「搜索」自增，用于强制重搜同一个关键词 */
+  nonce: number;
+  /** 点歌手 / 专辑时，用它的名字再搜一次歌曲 */
+  onSearchByName: (name: string) => void;
+  /** 导入本地后可刷新本地歌手 / 歌曲列表 */
+  onImported?: () => void;
+  /** 加入歌单：先把在线歌曲导入本地拿到 id，再交给外层打开歌单选择弹窗 */
+  onAddToPlaylist?: (song: Record<string, unknown>) => void;
+}) {
+  const { play, updateCurrent } = usePlayerStore();
+
   const [songs, setSongs] = useState<KugouSong[]>([]);
+  const [singers, setSingers] = useState<KugouSinger[]>([]);
+  const [albums, setAlbums] = useState<KugouAlbum[]>([]);
   const [loading, setLoading] = useState(false);
-  const [ranks, setRanks] = useState<KugouRank[]>([]);
-  const [rankSongs, setRankSongs] = useState<KugouSong[]>([]);
-  const [activeRank, setActiveRank] = useState<KugouRank | null>(null);
-  const [lyricDialog, setLyricDialog] = useState<{ open: boolean; text: string; title: string }>({
-    open: false,
-    text: '',
-    title: '',
-  });
+  const [searched, setSearched] = useState(false);
+  const [page, setPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [lyricDialog, setLyricDialog] = useState({ open: false, text: '', title: '' });
+  /** 正在「导入并加入歌单」的歌曲 hash */
+  const [playlistBusy, setPlaylistBusy] = useState<string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  /** 搜索代号：关键词 / 维度变化时自增，用于丢弃在途的翻页响应 */
+  const searchKeyRef = useRef(0);
 
   useEffect(() => {
-    if (tab !== 'rank') return;
-    (async () => {
-      try {
-        const [top, list] = await Promise.all([getKugouRankTopService(), getKugouRankListService()]);
-        setRanks([...normalizeRanks(top, 'list'), ...normalizeRanks(list, 'info')]);
-      } catch {
-        setRanks([]);
-      }
-    })();
-  }, [tab]);
-
-  const search = async () => {
-    if (!keyword.trim()) {
-      toast.warning('请输入搜索关键词');
+    const kw = keyword.trim();
+    searchKeyRef.current += 1;
+    if (!kw) {
+      setSongs([]);
+      setSingers([]);
+      setAlbums([]);
+      setSearched(false);
+      setPage(1);
+      setHasMore(false);
+      setLoadingMore(false);
       return;
     }
-    setLoading(true);
-    try {
-      const res = await searchKugouSongsService(keyword, 1, 30);
-      const data = res.data as unknown as { songs?: Array<Record<string, unknown>> } | undefined;
-      const list = Array.isArray(data?.songs) ? data!.songs : [];
-      setSongs(list.map(normalizeKugouSong));
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const loadRank = async (rank: KugouRank) => {
-    setActiveRank(rank);
+    let cancelled = false;
     setLoading(true);
+    setPage(1);
+    setHasMore(false);
+    setLoadingMore(false);
+    (async () => {
+      try {
+        const res = await searchKugouService(kw, dimension, 1, PAGE_SIZE);
+        if (cancelled) return;
+        const data = res.data as unknown as {
+          songs?: Array<Record<string, unknown>>;
+          singers?: Array<Record<string, unknown>>;
+          albums?: Array<Record<string, unknown>>;
+        };
+
+        if (dimension === 'singer') {
+          const list = (data?.singers ?? []).map((s) => ({ id: String(s.id ?? ''), name: String(s.name ?? '') }));
+          setSingers(list);
+          setHasMore(list.length >= PAGE_SIZE);
+        } else if (dimension === 'album') {
+          const list = (data?.albums ?? []).map((a) => ({
+            id: String(a.id ?? ''),
+            name: String(a.name ?? ''),
+            singer: String(a.singer ?? ''),
+            songCount: Number(a.songCount ?? 0),
+            publishTime: String(a.publishTime ?? ''),
+            image: String(a.image ?? ''),
+          }));
+          setAlbums(list);
+          setHasMore(list.length >= PAGE_SIZE);
+        } else {
+          const list = (data?.songs ?? []).map(normalizeSong);
+          setSongs(list);
+          setHasMore(list.length >= PAGE_SIZE);
+        }
+        setSearched(true);
+      } catch {
+        if (!cancelled) setSearched(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [keyword, dimension, nonce]);
+
+  /** 拉取下一页并追加（滚动到底部触发） */
+  const loadMore = useCallback(async () => {
+    const kw = keyword.trim();
+    if (!kw || loadingMore || !hasMore) return;
+    const next = page + 1;
+    const myKey = searchKeyRef.current;
+    setLoadingMore(true);
     try {
-      const res = await getKugouRankAudioService(String(rank.rankId), Number(rank.rankCid ?? 0), 1, 30);
-      const data = res.data as unknown as { data?: { songlist?: Array<Record<string, unknown>> } } | undefined;
-      const list = Array.isArray(data?.data?.songlist) ? data!.data!.songlist : [];
-      setRankSongs(list.map(normalizeKugouSong));
+      const res = await searchKugouService(kw, dimension, next, PAGE_SIZE);
+      if (myKey !== searchKeyRef.current) return;
+      const data = res.data as unknown as {
+        songs?: Array<Record<string, unknown>>;
+        singers?: Array<Record<string, unknown>>;
+        albums?: Array<Record<string, unknown>>;
+      };
+      if (dimension === 'singer') {
+        const list = (data?.singers ?? []).map((s) => ({ id: String(s.id ?? ''), name: String(s.name ?? '') }));
+        setSingers((prev) => [...prev, ...list]);
+        setHasMore(list.length >= PAGE_SIZE);
+      } else if (dimension === 'album') {
+        const list = (data?.albums ?? []).map((a) => ({
+          id: String(a.id ?? ''),
+          name: String(a.name ?? ''),
+          singer: String(a.singer ?? ''),
+          songCount: Number(a.songCount ?? 0),
+          publishTime: String(a.publishTime ?? ''),
+          image: String(a.image ?? ''),
+        }));
+        setAlbums((prev) => [...prev, ...list]);
+        setHasMore(list.length >= PAGE_SIZE);
+      } else {
+        const list = (data?.songs ?? []).map(normalizeSong);
+        setSongs((prev) => [...prev, ...list]);
+        setHasMore(list.length >= PAGE_SIZE);
+      }
+      setPage(next);
+    } catch {
+      /* 拦截器已提示 */
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
-  };
+  }, [keyword, dimension, page, loadingMore, hasMore]);
+
+  // 列表底部哨兵进入视口 → 自动加载下一页
+  useEffect(() => {
+    if (!hasMore || loading || loadingMore) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) loadMore();
+      },
+      { rootMargin: '240px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, loadMore]);
+
+  /** 列表底部状态：有下一页时挂哨兵 + 加载提示，否则「没有更多了」 */
+  const renderFooter = () =>
+    hasMore ? (
+      <>
+        <Box ref={sentinelRef} sx={{ height: 1 }} />
+        {loadingMore ? (
+          <Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+            加载中…
+          </Typography>
+        ) : null}
+      </>
+    ) : (
+      <Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+        没有更多了
+      </Typography>
+    );
+
 
   const handlePlay = async (song: KugouSong) => {
-    const hash = song.hash || song.hash_128;
+    const hash = song.hash;
     if (!hash) {
       toast.error('该歌曲缺少播放信息');
       return;
     }
     try {
-      const res = await getKugouPlayUrlService(String(hash), '128', String(song.albumAudioId ?? ''), String(song.albumId ?? ''));
+      const res = await getKugouPlayUrlService(
+        String(hash),
+        '128',
+        String(song.albumAudioId ?? ''),
+        String(song.albumId ?? ''),
+      );
       const url = (res.data as unknown as { url?: string | string[] })?.url;
       const playUrl = Array.isArray(url) ? url[0] : url;
       if (!playUrl) {
         toast.error('该曲目需酷狗会员，暂无法获取播放地址');
         return;
       }
+      // 先起播（带上封面），歌词异步补齐，避免等歌词卡住播放
       play({
         id: String(hash),
         name: song.name || '未知歌曲',
         singerName: song.singer,
         url: playUrl,
+        pic: song.image || undefined,
         source: 'kugou',
         hash: String(hash),
         albumAudioId: String(song.albumAudioId ?? ''),
         albumId: String(song.albumId ?? ''),
       });
+      const lyrics = await fetchLyricText(song);
+      if (lyrics && String(usePlayerStore.getState().current?.id) === String(hash)) {
+        updateCurrent({ lyrics });
+      }
     } catch {
-      /* ignore */
+      /* 拦截器已提示 */
+    }
+  };
+
+  const fetchLyricText = async (song: KugouSong): Promise<string> => {
+    if (!song.hash) return '';
+    try {
+      const res = await getKugouLyricService(String(song.hash), String(song.albumAudioId ?? ''), song.name || '');
+      const data = res.data as unknown as { lyrics?: string; lyric?: string } | string;
+      const text = typeof data === 'string' ? data : data?.lyrics || data?.lyric || '';
+      return text === '暂无歌词' ? '' : text;
+    } catch {
+      return '';
     }
   };
 
   const showLyric = async (song: KugouSong) => {
-    const hash = song.hash || song.hash_128;
-    if (!hash) return;
-    const res = await getKugouLyricService(String(hash), String(song.albumAudioId ?? ''), keyword);
-    const data = res.data as unknown as { lyrics?: string; lyric?: string } | string;
-    const text = typeof data === 'string' ? data : data?.lyrics || data?.lyric || '暂无歌词';
+    if (!song.hash) return;
+    const text = (await fetchLyricText(song)) || '暂无歌词';
     setLyricDialog({ open: true, text, title: song.name || '歌词' });
   };
 
-  const importSong = async (song: KugouSong) => {
-    const hash = song.hash || song.hash_128;
-    if (!hash) return;
-    const res = await importKugouSongService({
-      hash: String(hash),
-      name: song.name || '',
-      singer: song.singer || '',
-      album: song.album || '',
-      albumId: String(song.albumId ?? ''),
-      albumAudioId: String(song.albumAudioId ?? ''),
-      image: song.image || '',
-      duration: song.duration || 0,
-    });
-    if (res.code === 200) {
-      toast.success('已导入本地曲库');
+  const importPayload = (song: KugouSong) => ({
+    hash: String(song.hash ?? ''),
+    name: song.name || '',
+    singer: song.singer || '',
+    album: song.album || '',
+    albumId: String(song.albumId ?? ''),
+    albumAudioId: String(song.albumAudioId ?? ''),
+    image: song.image || '',
+    duration: song.duration || 0,
+  });
+
+  /** 收藏 = 入库：先导入本地曲库，再加入收藏（特殊歌单） */
+  const collectSong = async (song: KugouSong) => {
+    if (!song.hash) return;
+    const res = await importKugouSongService(importPayload(song));
+    const created = res.data as unknown as { id?: number } | undefined;
+    if (res.code === 200 && created?.id != null) {
+      let favorited = false;
+      try {
+        const fav = await addCollectionService('0', created.id);
+        favorited = fav.code === 200;
+      } catch {
+        /* 已收藏或收藏失败都不影响入库 */
+      }
+      toast.success(favorited ? '已收藏并加入曲库' : '已加入曲库');
+      // 导入会创建歌手，刷新后本地列表才不会显示「未知歌手」
+      onImported?.();
+    } else if (res.code === 200) {
+      toast.success('已加入曲库');
+      onImported?.();
     } else {
-      toast.error((res as { message?: string }).message || '导入失败（需要管理员权限）');
+      toast.error((res as { message?: string }).message || '收藏失败');
     }
   };
 
-  const renderSong = (song: KugouSong, idx: number) => (
-    <ListItem
-      key={`${song.hash || song.name}-${idx}`}
-      secondaryAction={
-        <Stack direction="row" spacing={0.5}>
-          <Tooltip title="播放">
-            <IconButton onClick={() => handlePlay(song)}>
-              <PlayArrowRoundedIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="歌词">
-            <IconButton onClick={() => showLyric(song)}>
-              <LyricsRoundedIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="导入本地曲库">
-            <IconButton onClick={() => importSong(song)}>
-              <DownloadRoundedIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Stack>
+  /** 加入歌单：先导入本地（后端按「歌名 + 歌手」去重）拿到 song.id，再交给外层选择歌单 */
+  const addSongToPlaylist = async (song: KugouSong) => {
+    const hash = song.hash;
+    if (!hash) {
+      toast.error('该歌曲缺少导入信息');
+      return;
+    }
+    setPlaylistBusy(hash);
+    try {
+      const res = await importKugouSongService(importPayload(song));
+      const created = res.data as unknown as
+        | { id?: number; name?: string; pic?: string }
+        | undefined;
+      if (res.code === 200 && created?.id != null) {
+        onImported?.();
+        onAddToPlaylist?.({
+          id: created.id,
+          name: created.name || song.name || '',
+          singerName: song.singer || '',
+          pic: created.pic || song.image || '',
+        });
+      } else {
+        toast.error((res as { message?: string }).message || '导入失败');
       }
-    >
-      <ListItemAvatar>
-        <Avatar variant="rounded">
-          <MusicNoteRoundedIcon />
-        </Avatar>
-      </ListItemAvatar>
-      <ListItemText
-        primary={<Typography fontWeight={600}>{song.name || '未知歌曲'}</Typography>}
-        secondary={song.singer || '未知歌手'}
+    } catch {
+      /* 拦截器已提示 */
+    } finally {
+      setPlaylistBusy(null);
+    }
+  };
+
+  // ────────────────────────── 渲染 ──────────────────────────
+
+  if (!keyword.trim()) {
+    return (
+      <EmptyState
+        icon={<MusicNoteRoundedIcon />}
+        title="在线搜索"
+        description="在上面的搜索框里输入关键词，可以用歌曲 / 歌手 / 专辑三种方式检索酷狗音乐。"
+        minHeight={240}
       />
-    </ListItem>
-  );
+    );
+  }
 
-  return (
-    <Box>
-      <Card sx={{ p: 2.5, mb: 3.5, borderRadius: 'var(--mm-radius-lg)' }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2.5 }}>
-          <Tab value="search" label="在线搜索" />
-          <Tab value="rank" label="排行榜" />
-        </Tabs>
-        {tab === 'search' && (
-          <Stack direction="row" spacing={2}>
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="搜索歌曲、歌手"
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && search()}
-              slotProps={{
-                input: {
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchRoundedIcon fontSize="small" />
-                    </InputAdornment>
-                  ),
-                },
+  if (loading) {
+    return (
+      <Stack alignItems="center" spacing={2} sx={{ py: 8 }}>
+        <Typography color="text.secondary">正在搜索酷狗音乐…</Typography>
+      </Stack>
+    );
+  }
+
+  if (!searched) return null;
+
+  // 歌手
+  if (dimension === 'singer') {
+    if (singers.length === 0) {
+      return <EmptyState icon={<PersonRoundedIcon />} title="没有找到相关歌手" description="换个关键词试试" />;
+    }
+    return (
+      <Box>
+        <List disablePadding>
+          {singers.map((s, i) => (
+            <ListItemButton key={`${s.id}-${i}`} onClick={() => onSearchByName(s.name || '')} sx={{ mb: 0.75, py: 1 }}>
+              <ListItemAvatar>
+                <Avatar variant="rounded" sx={{ bgcolor: 'var(--mm-sunken)', color: 'var(--mm-accent-text)' }}>
+                  <PersonRoundedIcon fontSize="small" />
+                </Avatar>
+              </ListItemAvatar>
+              <ListItemText primary={<Typography fontWeight={700}>{s.name || '未知歌手'}</Typography>} />
+              <Chip size="small" label="查看歌曲" />
+            </ListItemButton>
+          ))}
+        </List>
+        {renderFooter()}
+      </Box>
+    );
+  }
+
+  // 专辑
+  if (dimension === 'album') {
+    if (albums.length === 0) {
+      return <EmptyState icon={<AlbumRoundedIcon />} title="没有找到相关专辑" description="换个关键词试试" />;
+    }
+    return (
+      <Box>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 2 }}>
+          {albums.map((a, i) => (
+            <Card
+              key={`${a.id}-${i}`}
+              className="mm-hover-lift"
+              role="button"
+              tabIndex={0}
+              onClick={() => onSearchByName(a.name || '')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSearchByName(a.name || '');
+                }
               }}
-            />
-            <Button variant="contained" onClick={search} disabled={loading}>
-              搜索
-            </Button>
-          </Stack>
-        )}
-      </Card>
-
-      {tab === 'search' ? (
-        songs.length === 0 ? (
-          <EmptyState icon={<SearchRoundedIcon sx={{ fontSize: 64 }} />} title="搜索酷狗音乐" description="输入关键词开始搜索" />
-        ) : (
-          <Card sx={{ borderRadius: 'var(--mm-radius-lg)' }}>
-            <List>{songs.map(renderSong)}</List>
-          </Card>
-        )
-      ) : (
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
-          <Card sx={{ borderRadius: 'var(--mm-radius-lg)', p: 1.5, minWidth: 240, height: 'fit-content' }}>
-            <List>
-              {ranks.map((r) => (
-                <ListItemButton
-                  key={r.rankId}
-                  selected={activeRank?.rankId === r.rankId}
-                  onClick={() => loadRank(r)}
-                  sx={{ borderRadius: 'var(--mm-radius-sm)' }}
-                >
-                  <ListItemText primary={r.rankName} />
-                </ListItemButton>
-              ))}
-            </List>
-          </Card>
-          <Box sx={{ flex: 1 }}>
-            {rankSongs.length === 0 ? (
-              <EmptyState icon={<MusicNoteRoundedIcon sx={{ fontSize: 64 }} />} title="选择一个榜单查看歌曲" />
-            ) : (
-              <Card sx={{ borderRadius: 'var(--mm-radius-lg)' }}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
-                    {activeRank?.rankName ?? '榜单歌曲'}
+              sx={{ overflow: 'hidden', cursor: 'pointer' }}
+            >
+              <CoverImage
+                src={a.image}
+                alt={a.name || '专辑'}
+                sx={{ width: '100%', height: 160, objectFit: 'cover', display: 'block', bgcolor: 'var(--mm-sunken)' }}
+              />
+              <Box sx={{ p: 1.75 }}>
+                <Typography variant="subtitle2" fontWeight={700} noWrap>
+                  {a.name || '未知专辑'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+                  {a.singer || '未知歌手'}
+                </Typography>
+                {a.songCount ? (
+                  <Typography variant="caption" color="text.secondary">
+                    {a.songCount} 首
                   </Typography>
-                  <List>{rankSongs.map(renderSong)}</List>
-                </CardContent>
-              </Card>
-            )}
-          </Box>
-        </Stack>
-      )}
+                ) : null}
+              </Box>
+            </Card>
+          ))}
+        </Box>
+        {renderFooter()}
+      </Box>
+    );
+  }
 
-      <Dialog open={lyricDialog.open} onClose={() => setLyricDialog((s) => ({ ...s, open: false }))} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>{lyricDialog.title}</DialogTitle>
-        <DialogContent>
-          <Box
-            sx={{
-              whiteSpace: 'pre-wrap',
-              fontSize: 13,
-              maxHeight: 400,
-              overflowY: 'auto',
-              p: 2.5,
-              borderRadius: 'var(--mm-radius)',
-              bgcolor: 'var(--mm-sunken)',
-              boxShadow: 'var(--mm-sunken-sm)',
-            }}
+  // 歌曲
+  if (songs.length === 0) {
+    return <EmptyState icon={<MusicNoteRoundedIcon />} title="没有找到相关歌曲" description="换个关键词试试" />;
+  }
+  return (
+    <>
+      <List disablePadding>
+        {songs.map((song, idx) => (
+          <ListItem
+            key={`${song.hash || song.name}-${idx}`}
+            sx={{ mb: 0.75 }}
+            secondaryAction={
+              <Stack direction="row" spacing={0.5}>
+                <Tooltip title="播放">
+                  <IconButton onClick={() => handlePlay(song)} aria-label="播放">
+                    <PlayArrowRoundedIcon />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="歌词">
+                  <IconButton onClick={() => showLyric(song)} aria-label="歌词">
+                    <LyricsRoundedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="加入歌单（会先导入本地）">
+                  <span>
+                    <IconButton
+                      onClick={() => addSongToPlaylist(song)}
+                      aria-label="加入歌单"
+                      disabled={playlistBusy === song.hash}
+                    >
+                      <PlaylistAddRoundedIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                <Tooltip title="收藏（会先加入曲库）">
+                  <IconButton onClick={() => collectSong(song)} aria-label="收藏">
+                    <FavoriteBorderRoundedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            }
           >
-            {lyricDialog.text}
+            <ListItemAvatar>
+              <Avatar variant="rounded" src={song.image || undefined}>
+                <MusicNoteRoundedIcon />
+              </Avatar>
+            </ListItemAvatar>
+            <ListItemText
+              primary={<Typography fontWeight={600}>{song.name || '未知歌曲'}</Typography>}
+              secondary={[song.singer, song.album].filter(Boolean).join(' · ') || '未知歌手'}
+            />
+          </ListItem>
+        ))}
+      </List>
+
+      {renderFooter()}
+
+      <Dialog open={lyricDialog.open} onClose={() => setLyricDialog((d) => ({ ...d, open: false }))} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800 }}>{lyricDialog.title}</DialogTitle>
+        <DialogContent>
+          <Box sx={{ p: 2.5, bgcolor: 'var(--mm-sunken)', boxShadow: 'var(--mm-sunken-sm)', maxHeight: 420, overflowY: 'auto' }}>
+            <Typography sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.9 }}>{lyricDialog.text}</Typography>
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setLyricDialog((s) => ({ ...s, open: false }))}>关闭</Button>
+          <Button onClick={() => setLyricDialog((d) => ({ ...d, open: false }))}>关闭</Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }

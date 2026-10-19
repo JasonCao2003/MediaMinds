@@ -11,7 +11,10 @@ public interface ListSongService {
 
     boolean updateListSongMsg(ListSong listSong);
 
-    boolean deleteListSong(Integer songId);
+    boolean deleteListSong(Integer id);
+
+    /** 把某首歌从指定歌单移除（不会动其它歌单） */
+    boolean removeSongFromSongList(Integer songListId, Integer songId);
 
     IPage<ListSong> pageListSong(Integer pageNum, Integer pageSize);
 

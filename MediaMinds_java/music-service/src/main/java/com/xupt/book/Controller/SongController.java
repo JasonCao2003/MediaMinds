@@ -30,8 +30,11 @@ public class SongController {
     @GetMapping
     public Result<?> getSongsByPage(
             @Parameter(description = "页码，默认1") @RequestParam(defaultValue = "1") Integer pageNum,
-            @Parameter(description = "每页条数，默认10") @RequestParam(defaultValue = "10") Integer pageSize) {
-        IPage<Song> songs = songService.getSongsByPage(pageNum, pageSize);
+            @Parameter(description = "每页条数，默认10") @RequestParam(defaultValue = "10") Integer pageSize,
+            @Parameter(description = "排序字段：createTime / name")
+            @RequestParam(required = false) String sortField,
+            @Parameter(description = "排序方向：asc / desc") @RequestParam(required = false) String sortOrder) {
+        IPage<Song> songs = songService.getSongsByPage(pageNum, pageSize, sortField, sortOrder);
         return Result.success(songs);
     }
 
@@ -64,8 +67,11 @@ public class SongController {
     public Result<?> getSongByNamePage(
             @Parameter(description = "歌曲名称") @RequestParam String name,
             @Parameter(description = "页码，默认1") @RequestParam(defaultValue = "1") Integer pageNum,
-            @Parameter(description = "每页条数，默认10") @RequestParam(defaultValue = "10") Integer pageSize) {
-        return Result.success(songService.getSongByLikeNamePage('%'+name+'%', pageNum, pageSize));
+            @Parameter(description = "每页条数，默认10") @RequestParam(defaultValue = "10") Integer pageSize,
+            @Parameter(description = "排序字段：createTime / name")
+            @RequestParam(required = false) String sortField,
+            @Parameter(description = "排序方向：asc / desc") @RequestParam(required = false) String sortOrder) {
+        return Result.success(songService.getSongByLikeNamePage(name, pageNum, pageSize, sortField, sortOrder));
     }
 
     @Operation(summary = "获取歌曲总数", description = "获取系统中所有歌曲的总数量")
@@ -90,7 +96,8 @@ public class SongController {
         song.setPic("/img/songPic/tubiao.jpg");
         song.setUrl(filePath);
         boolean res = songService.addSong(song);
-        return res ? Result.success(filePath) : Result.error("上传失败，数据库插入失败");
+        // 返回实体（含自增 id），前端随后要用它上传封面
+        return res ? Result.success(song) : Result.error("上传失败，数据库插入失败");
     }
 
     @Operation(summary = "删除歌曲", description = "根据歌曲 ID 删除歌曲")

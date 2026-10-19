@@ -1,10 +1,21 @@
 import request, { type ApiResult } from '@/lib/request';
+import type { Song } from '@/types';
 
 const prefix = '/v1/music/kugou';
 
-/** 搜索歌曲 */
-export const searchKugouSongsService = (keyword: string, page = 1, size = 30) =>
-  request.get<ApiResult<unknown>>(`${prefix}/search`, { params: { keyword, page, size } });
+/** 在线搜索维度 */
+export type KugouDimension = 'song' | 'singer' | 'album';
+
+/**
+ * 在线搜索（按维度）。
+ * song → data.songs[]；singer → data.singers[]；album → data.albums[]。
+ */
+export const searchKugouService = (
+  keyword: string,
+  type: KugouDimension = 'song',
+  page = 1,
+  size = 30,
+) => request.get<ApiResult<unknown>>(`${prefix}/search`, { params: { keyword, type, page, size } });
 
 /** 获取播放直链 */
 export const getKugouPlayUrlService = (
@@ -58,6 +69,21 @@ export const getKugouQrKeyService = () => request.get<ApiResult<unknown>>(`${pre
 export const getKugouQrStatusService = (key: string) =>
   request.get<ApiResult<unknown>>(`${prefix}/login/qr/status`, { params: { key } });
 
-/** 导入歌曲到本地曲库 */
+/** 导入歌曲到本地曲库；返回落库后的 Song 实体（含自增 id，可继续加入歌单） */
 export const importKugouSongService = (song: Record<string, unknown>) =>
-  request.post<ApiResult<void>>(`${prefix}/import`, song);
+  request.post<ApiResult<Song>>(`${prefix}/import`, song);
+
+/** 按本地歌曲 ID 重新解析酷狗播放直链（直链过期 / 重新登录后播放前调用） */
+export const refreshKugouSongUrlService = (songId: number | string) =>
+  request.post<ApiResult<string>>(`${prefix}/url/by-song`, null, { params: { songId } });
+
+/** 酷狗登录状态（登录态持久化在 music_data.kugou_auth，重启后仍在） */
+export interface KugouLoginStatus {
+  loggedIn: boolean;
+  userId: string;
+}
+
+export const getKugouLoginStatusService = () =>
+  request.get<ApiResult<KugouLoginStatus>>(`${prefix}/login/status`);
+
+export const kugouLogoutService = () => request.post<ApiResult<unknown>>(`${prefix}/logout`);

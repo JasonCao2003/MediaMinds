@@ -54,6 +54,8 @@ public class MediaImporter {
                     row.put("code", code);
                     row.put("message", resp.get("message"));
                     if (code >= 200 && code < 300) {
+                        // 收藏 = 入库：导入成功后顺手加入收藏；取消收藏不会删除库里的内容
+                        row.put("favorited", favorite(item.getSource(), resp));
                         imported.add(row);
                     } else {
                         failed.add(row);
@@ -71,6 +73,50 @@ public class MediaImporter {
         summary.put("importedCount", imported.size());
         summary.put("failedCount", failed.size());
         return summary;
+    }
+
+    /**
+     * 把刚导入的条目加入收藏。
+     *
+     * <p>失败不影响「已入库」的结果——最多只是没收藏上，用户可以在库中手动收藏。
+     */
+    @SuppressWarnings("unchecked")
+    private boolean favorite(String source, Map<String, Object> importResponse) {
+        Integer localId = localIdOf(source, importResponse);
+        if (localId == null) {
+            return false;
+        }
+        try {
+            Map<String, Object> resp = switch (source) {
+                case "kugou" -> musicClient.addCollection((byte) 0, localId);
+                case "tmdb" -> videoClient.addFavorite(localId.longValue());
+                case "douban" -> bookClient.addFavorite(Map.of("bookId", localId, "chapterId", 0));
+                default -> null;
+            };
+            return resp != null && Values.longOf(resp.get("code")) >= 200 && Values.longOf(resp.get("code")) < 300;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Integer localIdOf(String source, Map<String, Object> response) {
+        Object data = response == null ? null : response.get("data");
+        if (!(data instanceof Map<?, ?> map)) {
+            return null;
+        }
+        Object node = switch (source) {
+            case "tmdb" -> map.get("movie");
+            case "douban" -> map.get("book");
+            default -> map;
+        };
+        if (node instanceof Map<?, ?> entity) {
+            Object id = entity.get("id");
+            if (id instanceof Number number) {
+                return number.intValue();
+            }
+        }
+        return null;
     }
 
     private Map<String, Object> kugouBody(Candidate item) {

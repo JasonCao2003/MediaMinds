@@ -112,6 +112,38 @@ public class KugouProperties {
         return installDev;
     }
 
+    /**
+     * 登录成功后更新进程内的登录态（重启后回到环境变量配置）。
+     *
+     * <p>手机验证码 / 扫码登录接口拿到的 token 只存在内存里，后续请求立即生效。
+     */
+    /** 退出登录：清掉进程内登录态（环境变量配置的也会被清，重启后恢复） */
+    public void clearLoginState() {
+        this.token = "";
+        this.userId = "0";
+        this.dfid = "-";
+        this.vipToken = "";
+        this.vipType = "0";
+    }
+
+    public void updateLoginState(String token, String userId, String dfid, String vipToken, String vipType) {
+        if (token != null && !token.isBlank()) {
+            this.token = token.trim();
+        }
+        if (userId != null && !userId.isBlank() && !"0".equals(userId.trim())) {
+            this.userId = userId.trim();
+        }
+        if (dfid != null && !dfid.isBlank() && !"-".equals(dfid.trim())) {
+            this.dfid = dfid.trim();
+        }
+        if (vipToken != null && !vipToken.isBlank()) {
+            this.vipToken = vipToken.trim();
+        }
+        if (vipType != null && !vipType.isBlank()) {
+            this.vipType = vipType.trim();
+        }
+    }
+
     private static String randomHex(int length) {
         String chars = "0123456789abcdef";
         StringBuilder sb = new StringBuilder(length);

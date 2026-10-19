@@ -3,6 +3,13 @@ server:
 spring:
   application:
     name: book-service
+  # 图书文件上传：Spring 默认单文件 1MB / 请求 10MB，EPUB/PDF/CBZ 动辄几十 MB，必配
+  servlet:
+    multipart:
+      max-file-size: 200MB
+      max-request-size: 210MB
+      # 超过 2MB 直接落盘，不在内存里缓冲（大 PDF 否则会 OOM）
+      file-size-threshold: 2MB
   # MySQL
   datasource:
     url: jdbc:mysql://localhost:3306/book_db?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=UTF-8&useSSL=false
@@ -46,3 +53,55 @@ gutenberg:
   import-download-cover: true
   # 导入时是否把正文下载并按章节切分存入 MinIO
   import-download-text: true
+
+# Google Books 书源配置（官方公开 API；api-key 可选，不填走匿名配额）
+book:
+  google:
+    api-key: ${GOOGLE_BOOKS_API_KEY:}
+    page-size: 20
+
+  # 图书文件存储配置
+  #
+  # 暂存：用户上传后先落到本地暂存目录并抽取元数据，确认入库时才转存 MinIO——
+  # 这样「抽取结果不满意」的文件不会污染书库。
+  # 缓存：MinIO 上的书文件在本地缓存一份，供 ZipFile 随机读单个资源（EPUB 章节 / CBZ 页），
+  # 避免每次请求都从 MinIO 拉整个文件。
+  #
+  # 用绝对路径：服务由 start-all.sh 以 `java -jar` 启动，CWD 不固定，相对路径不可靠。
+  # start-all.sh 会导出 BOOK_FILE_DIR；直接 java -jar 时回落到系统临时目录。
+  file:
+    # 根目录，下面自动分 staging / cache 两个子目录
+    root-dir: ${BOOK_FILE_DIR:${java.io.tmpdir}/mediaminds-book}
+    # 暂存文件保留时长（分钟），超时由定时任务清理
+    staging-ttl-minutes: 120
+    # 单文件上限（字节），与 spring.servlet.multipart 的限制保持一致
+    max-file-size: 209715200
+
+  # 阶段 6：批量刷新元数据（定时任务默认关闭，手动接口始终可用）
+  refresh:
+    enabled: false
+    # 定时全量刷新间隔（秒）
+    interval-seconds: 86400
+    # 每次最多处理多少本
+    limit: 50
+
+  # 自动划分章节（只写 epub:// / pdf:// 指针，不复制正文）
+  chapters:
+    # PDF 识别不到标题时每多少页一章；0 = 只生成「全文」一章
+    pdf-fallback-pages: 10
+    # 单本最多生成多少章
+    max-chapters: 2000
+    # 抽取文本少于该长度就不生成章节（扫描版 PDF / 空文件）
+    min-text-length: 50
+
+  # 阶段 6：BookDrop（把文件丢进投递目录自动入库；默认关闭）
+  drop:
+    enabled: false
+    # 留空则用 ${BOOK_FILE_DIR}/drop
+    dir: ""
+    # 扫描间隔（秒）
+    poll-seconds: 600
+    # 入库后写入的 source 标记
+    source: BookDrop
+    # 处理后把源文件移到 processed 子目录
+    move-processed: true

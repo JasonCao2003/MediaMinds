@@ -10,7 +10,6 @@ import {
   InputAdornment,
   Tabs,
   Tab,
-  Divider,
   Stack,
   Alert,
   CircularProgress,
@@ -19,8 +18,6 @@ import {
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import LockRoundedIcon from '@mui/icons-material/LockRounded';
 import MailRoundedIcon from '@mui/icons-material/MailRounded';
-import BadgeRoundedIcon from '@mui/icons-material/BadgeRounded';
-import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import AutoStoriesRoundedIcon from '@mui/icons-material/AutoStoriesRounded';
 import HeadphonesRoundedIcon from '@mui/icons-material/HeadphonesRounded';
 import MovieRoundedIcon from '@mui/icons-material/MovieRounded';
@@ -28,7 +25,7 @@ import BrandLogo from '@/components/BrandLogo';
 import ThemeToggle from '@/components/common/ThemeToggle';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from '@/lib/notify';
-import { userRegisterService, userInfoService } from '@/api/user';
+import { userInfoService } from '@/api/user';
 import { accountLoginService, emailLoginService, loginValidationService } from '@/api/login';
 
 type LoginType = 'account' | 'email';
@@ -43,14 +40,12 @@ export default function LoginPage() {
   const router = useRouter();
   const { setToken, setInfo } = useAuthStore();
 
-  const [isRegister, setIsRegister] = useState(false);
   const [loginType, setLoginType] = useState<LoginType>('account');
   const [loading, setLoading] = useState(false);
 
   const [form, setForm] = useState({
     userName: '',
     password: '',
-    rePassword: '',
     email: '',
     verificationCode: '',
   });
@@ -133,35 +128,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleRegister = async () => {
-    if (!form.userName || !form.password || !form.rePassword || !form.email) {
-      toast.warning('请完整填写注册信息');
-      return;
-    }
-    if (form.password !== form.rePassword) {
-      toast.error('两次输入的密码不一致');
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await userRegisterService({
-        userName: form.userName,
-        password: form.password,
-        rePassword: form.rePassword,
-        email: form.email,
-        verificationCode: form.verificationCode,
-      });
-      if (res.code === 200) {
-        toast.success(res.msg || '注册成功，请登录');
-        setIsRegister(false);
-      }
-    } catch {
-      /* ignore */
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const adornment = (icon: React.ReactNode) => ({
     input: { startAdornment: <InputAdornment position="start">{icon}</InputAdornment> },
   });
@@ -219,7 +185,7 @@ export default function LoginPage() {
               更简单、更智能
             </Typography>
             <Typography color="text.secondary" sx={{ mb: 4 }}>
-              一站式书影音资源平台，由大模型驱动的智能入库。
+              一站式书影音资源平台，由大模型驱动的智能收藏。
             </Typography>
 
             <Stack spacing={2.5}>
@@ -265,13 +231,34 @@ export default function LoginPage() {
           </Box>
 
           <Typography variant="h4" sx={{ fontWeight: 800, textAlign: 'center' }}>
-            {isRegister ? '创建账户' : '欢迎回来'}
+            欢迎回来
           </Typography>
           <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ mt: 0.75, mb: 3.5 }}>
-            {isRegister ? '注册 MediaMinds 账户，开启智能管理' : '登录以继续使用 MediaMinds'}
+            登录以确认访问权限
           </Typography>
 
-          {isRegister ? (
+          <Tabs
+            value={loginType}
+            onChange={(_, v) => setLoginType(v)}
+            variant="fullWidth"
+            sx={{ mb: 3.5, width: '100%' }}
+          >
+            {[
+              { value: 'account', label: '账号', icon: <PersonRoundedIcon fontSize="small" /> },
+              { value: 'email', label: '邮箱', icon: <MailRoundedIcon fontSize="small" /> },
+            ].map((t) => (
+              <Tab
+                key={t.value}
+                value={t.value}
+                icon={t.icon}
+                iconPosition="start"
+                label={t.label}
+                sx={{ flex: 1 }}
+              />
+            ))}
+          </Tabs>
+
+          {loginType === 'account' && (
             <Stack spacing={2.25}>
               <TextField
                 fullWidth
@@ -279,7 +266,6 @@ export default function LoginPage() {
                 value={form.userName}
                 onChange={update('userName')}
                 slotProps={adornment(<PersonRoundedIcon fontSize="small" />)}
-                helperText="长度为 5~16 位非空字符"
               />
               <TextField
                 fullWidth
@@ -287,16 +273,25 @@ export default function LoginPage() {
                 label="密码"
                 value={form.password}
                 onChange={update('password')}
+                onKeyDown={(e) => e.key === 'Enter' && handleAccountLogin()}
                 slotProps={adornment(<LockRoundedIcon fontSize="small" />)}
               />
-              <TextField
+              <Button
+                variant="contained"
+                size="large"
                 fullWidth
-                type="password"
-                label="确认密码"
-                value={form.rePassword}
-                onChange={update('rePassword')}
-                slotProps={adornment(<LockRoundedIcon fontSize="small" />)}
-              />
+                disabled={loading}
+                onClick={handleAccountLogin}
+                startIcon={loading && <CircularProgress size={18} color="inherit" />}
+                sx={{ mt: 1 }}
+              >
+                登录
+              </Button>
+            </Stack>
+          )}
+
+          {loginType === 'email' && (
+            <Stack spacing={2.25}>
               <TextField
                 fullWidth
                 label="邮箱"
@@ -304,75 +299,41 @@ export default function LoginPage() {
                 onChange={update('email')}
                 slotProps={adornment(<MailRoundedIcon fontSize="small" />)}
               />
+              <TextField
+                fullWidth
+                label="验证码"
+                value={form.verificationCode}
+                onChange={update('verificationCode')}
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <LockRoundedIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <Button size="small" disabled={countdown > 0} onClick={sendCode}>
+                          {countdown > 0 ? `${countdown}s` : '获取验证码'}
+                        </Button>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
               <Button
                 variant="contained"
                 size="large"
                 fullWidth
                 disabled={loading}
-                onClick={handleRegister}
-                startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <BadgeRoundedIcon />}
+                onClick={handleEmailLogin}
+                startIcon={loading && <CircularProgress size={18} color="inherit" />}
                 sx={{ mt: 1 }}
               >
-                注册
-              </Button>
-              <Button color="inherit" onClick={() => setIsRegister(false)} startIcon={<ArrowBackRoundedIcon />}>
-                返回登录
+                邮箱登录
               </Button>
             </Stack>
-          ) : (
-            <>
-              <Tabs
-                value={loginType}
-                onChange={(_, v) => setLoginType(v)}
-                variant="fullWidth"
-                sx={{ mb: 3.5, width: '100%' }}
-              >
-                {[
-                  { value: 'account', label: '账号', icon: <PersonRoundedIcon fontSize="small" /> },
-                  { value: 'email', label: '邮箱', icon: <MailRoundedIcon fontSize="small" /> },
-                ].map((t) => (
-                  <Tab
-                    key={t.value}
-                    value={t.value}
-                    icon={t.icon}
-                    iconPosition="start"
-                    label={t.label}
-                    sx={{ flex: 1 }}
-                  />
-                ))}
-              </Tabs>
-
-              {loginType === 'account' && (
-                <Stack spacing={2.25}>
-                  <TextField
-                    fullWidth
-                    label="用户名"
-                    value={form.userName}
-                    onChange={update('userName')}
-                    slotProps={adornment(<PersonRoundedIcon fontSize="small" />)}
-                  />
-                  <TextField
-                    fullWidth
-                    type="password"
-                    label="密码"
-                    value={form.password}
-                    onChange={update('password')}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAccountLogin()}
-                    slotProps={adornment(<LockRoundedIcon fontSize="small" />)}
-                  />
-                  <Button
-                    variant="contained"
-                    size="large"
-                    fullWidth
-                    disabled={loading}
-                    onClick={handleAccountLogin}
-                    startIcon={loading && <CircularProgress size={18} color="inherit" />}
-                    sx={{ mt: 1 }}
-                  >
-                    登录
-                  </Button>
-                </Stack>
-              )}
+          )}
 
               {loginType === 'email' && (
                 <Stack spacing={2.25}>
@@ -419,19 +380,8 @@ export default function LoginPage() {
                 </Stack>
               )}
 
-              <Divider sx={{ my: 3.5 }}>
-                <Typography variant="caption" color="text.secondary">
-                  还没有账户？
-                </Typography>
-              </Divider>
-              <Button fullWidth variant="outlined" onClick={() => setIsRegister(true)}>
-                注册新账户
-              </Button>
-            </>
-          )}
-
           <Alert severity="info" sx={{ mt: 3.5 }}>
-            用户名与密码长度均为 5~16 位；邮箱登录需先绑定邮箱。
+            本系统为个人媒体库，账号由部署时配置，不支持自助注册；邮箱登录需先绑定邮箱。
           </Alert>
         </Box>
       </Box>

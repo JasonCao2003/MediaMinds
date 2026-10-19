@@ -22,11 +22,20 @@ public class ListSongController {
     @Resource
     private ListSongService listSongService;
 
-    @Operation(summary = "添加歌曲到歌单", description = "将指定歌曲添加到某个歌单中")
+    @Operation(summary = "添加歌曲到歌单", description = "将指定歌曲添加到某个歌单中；重复添加返回 409")
     @PostMapping
     public Result<?> addListSong(@RequestBody ListSong listSong) {
         boolean res = listSongService.addListSong(listSong);
-        return res ? Result.success("添加成功") : Result.error("添加失败");
+        return res ? Result.success("添加成功") : Result.error(409, "歌曲已在歌单中或参数不完整");
+    }
+
+    @Operation(summary = "从歌单移除歌曲", description = "按歌单 ID + 歌曲 ID 移除，不会影响其它歌单")
+    @DeleteMapping("/remove")
+    public Result<?> removeSongFromSongList(
+            @Parameter(description = "歌单 ID", required = true) @RequestParam Integer songListId,
+            @Parameter(description = "歌曲 ID", required = true) @RequestParam Integer songId) {
+        boolean res = listSongService.removeSongFromSongList(songListId, songId);
+        return res ? Result.success("移除成功") : Result.error("移除失败");
     }
 
     @Operation(summary = "分页获取歌单歌曲", description = "分页返回所有歌单里包含的歌曲列表")

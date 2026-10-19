@@ -9,7 +9,6 @@ import MovieRoundedIcon from '@mui/icons-material/MovieRounded';
 import HeadphonesRoundedIcon from '@mui/icons-material/HeadphonesRounded';
 import SmartToyRoundedIcon from '@mui/icons-material/SmartToyRounded';
 import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
-import AccountCircleRoundedIcon from '@mui/icons-material/AccountCircleRounded';
 import AppShell, { type RailItem } from '@/components/layout/AppShell';
 import GlobalMusicPlayer from '@/components/layout/GlobalMusicPlayer';
 import { useAuthStore } from '@/stores/authStore';
@@ -21,7 +20,8 @@ const META: Record<string, { title: string; subtitle: string }> = {
   '/content/book': { title: '图书浏览', subtitle: '在文字里漫游' },
   '/content/video': { title: '视频浏览', subtitle: '在影像里穿行' },
   '/content/music': { title: '音乐浏览', subtitle: '在旋律里停留' },
-  '/content/agent': { title: '智能入库', subtitle: '用一句话把内容收进书架' },
+  '/content/music/playing': { title: '正在播放', subtitle: '当前播放的歌曲' },
+  '/content/agent': { title: '智能收藏', subtitle: '用一句话把内容收进收藏' },
   '/content/stats': { title: '时长统计', subtitle: '你在 MediaMinds 上花掉的时间' },
   '/content/profile': { title: '个人信息', subtitle: '管理你的账户与偏好' },
 };
@@ -31,9 +31,8 @@ const ITEMS: RailItem[] = [
   { kind: 'link', label: '图书浏览', href: '/content/book', icon: <MenuBookRoundedIcon /> },
   { kind: 'link', label: '视频浏览', href: '/content/video', icon: <MovieRoundedIcon /> },
   { kind: 'link', label: '音乐浏览', href: '/content/music', icon: <HeadphonesRoundedIcon /> },
-  { kind: 'link', label: '智能入库', href: '/content/agent', icon: <SmartToyRoundedIcon /> },
+  { kind: 'link', label: '智能收藏', href: '/content/agent', icon: <SmartToyRoundedIcon /> },
   { kind: 'link', label: '时长统计', href: '/content/stats', icon: <InsightsRoundedIcon /> },
-  { kind: 'link', label: '个人信息', href: '/content/profile', icon: <AccountCircleRoundedIcon /> },
 ];
 
 export default function UserLayout({ children }: { children: ReactNode }) {

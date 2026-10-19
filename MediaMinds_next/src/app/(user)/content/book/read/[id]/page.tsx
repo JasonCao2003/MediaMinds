@@ -31,9 +31,11 @@ import StarBorderRoundedIcon from '@mui/icons-material/StarBorderRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import { toast } from '@/lib/notify';
+import { getReadingProgress, saveReadingProgress } from '@/lib/readingProgress';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { pushRecent } from '@/lib/recent';
 import { useAuthStore } from '@/stores/authStore';
+import BookFileReader from '@/components/user/BookFileReader';
 import {
   getBookByIdService,
   getAllChaptersService,
@@ -61,7 +63,6 @@ const THEME_LABELS: Record<ReaderThemeKey, string> = {
 };
 
 const SETTINGS_KEY = 'mm_reader_settings';
-const PROGRESS_KEY = 'mm_reader_progress';
 
 export default function BookReaderPage() {
   const params = useParams<{ id: string }>();
@@ -123,14 +124,12 @@ export default function BookReaderPage() {
       } finally {
         setLoading(false);
       }
-      // 保存进度
-      try {
-        const progress = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}');
-        progress[bookId] = chapter.id;
-        localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress));
-      } catch {
-        /* ignore */
-      }
+      // 保存阅读进度（图书页据此显示「继续阅读」）
+      saveReadingProgress(bookId, {
+        chapterId: chapter.id,
+        chapterTitle: chapter.chapterTitle ?? undefined,
+        mode: 'chapter',
+      });
     },
     [bookId],
   );
@@ -146,14 +145,23 @@ export default function BookReaderPage() {
         setChapters(chapterList);
 
         const queryChapter = search?.get('chapterId');
+
+        // 上传的 EPUB / PDF / CBZ 默认走文件阅读器（它自己负责续读）。
+        // 这里**必须提前返回**，否则下面的章节自动加载会把进度覆盖成「章节模式」，
+        // 文件阅读器再读时就只剩 chapterId、没有 chapterIndex，于是每次从头开始。
+        const fmt = ((bookData.fileFormat as string) || '').toLowerCase();
+        const fileBacked = fmt === 'epub' || fmt === 'pdf' || fmt === 'cbz';
+        if (fileBacked && !queryChapter) {
+          setLoading(false);
+          return;
+        }
+
         let target: Chapter | undefined;
         if (queryChapter) target = chapterList.find((c) => String(c.id) === queryChapter);
         if (!target) {
-          try {
-            const progress = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}');
-            target = chapterList.find((c) => String(c.id) === String(progress[bookId]));
-          } catch {
-            /* ignore */
+          const progress = getReadingProgress(bookId);
+          if (progress?.chapterId != null) {
+            target = chapterList.find((c) => String(c.id) === String(progress.chapterId));
           }
         }
         target = target || chapterList[0];
@@ -217,6 +225,18 @@ export default function BookReaderPage() {
   );
 
   const readerTheme = THEMES[settings.theme];
+
+  // 用户上传的文件（EPUB / PDF / CBZ）默认走专用阅读器；
+  // 但从详情点「阅读本章」带了 chapterId 时，走章节正文（指针章节也能读）。
+  const fileFormat = (book?.fileFormat || '').toLowerCase();
+  const requestedChapterId = search?.get('chapterId');
+  if (
+    book &&
+    !requestedChapterId &&
+    (fileFormat === 'epub' || fileFormat === 'pdf' || fileFormat === 'cbz')
+  ) {
+    return <BookFileReader book={book} />;
+  }
 
   return (
     <Box>

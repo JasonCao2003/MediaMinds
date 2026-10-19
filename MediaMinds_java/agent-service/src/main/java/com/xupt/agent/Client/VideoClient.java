@@ -2,6 +2,7 @@ package com.xupt.agent.Client;
 
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
@@ -26,4 +27,7 @@ public interface VideoClient {
 
     @PostMapping("/v1/video/tmdb/import")
     Map<String, Object> tmdbImport(@RequestParam("tmdbId") long tmdbId);
+
+    @PostMapping("/v1/video/favorite/{movieId}")
+    Map<String, Object> addFavorite(@PathVariable("movieId") Long movieId);
 }

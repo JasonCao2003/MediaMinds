@@ -1,13 +1,5 @@
 import request, { type ApiResult } from '@/lib/request';
 
-export interface RegisterData {
-  userName: string;
-  password: string;
-  rePassword?: string;
-  email: string;
-  verificationCode?: string;
-}
-
 export interface UserItem {
   userId?: number;
   userName?: string;
@@ -21,10 +13,6 @@ export interface UserItem {
   createTime?: string;
   [key: string]: unknown;
 }
-
-/** 注册 */
-export const userRegisterService = (data: RegisterData) =>
-  request.post<ApiResult<void>>('/v1/auth/user/register', data);
 
 /** 获取当前用户详情 */
 export const userInfoService = () =>
