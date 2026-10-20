@@ -18,7 +18,7 @@ import {
 } from '@mui/material';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
-import StarBorderRoundedIcon from '@mui/icons-material/StarBorderRounded';
+import LibraryAddRoundedIcon from '@mui/icons-material/LibraryAddRounded';
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import EmptyState from '@/components/common/EmptyState';
 import CoverImage from '@/components/common/CoverImage';
@@ -31,7 +31,6 @@ import {
   importGoogleBookService,
   searchBookMetadataService,
   importBookMetadataService,
-  addFavoriteService,
   stageBookFileService,
   importBookFromProviderService,
   discardStagingService,
@@ -199,21 +198,11 @@ export default function OnlineBooksPanel({
         data?: { existed?: boolean; book?: { id?: number } };
       };
       if (res?.code === 200) {
-        // 收藏 = 入库：先把元信息收进书库，再收藏；取消收藏不会把书移出书库
-        const localId = res.data?.book?.id;
-        let favorited = false;
-        if (localId) {
-          try {
-            const fav = await addFavoriteService({ bookId: localId, chapterId: 0 });
-            favorited = fav.code === 200;
-          } catch {
-            /* 已收藏或收藏失败都不影响入库 */
-          }
-        }
-        toast.success(favorited ? '已收藏并加入书库' : '已加入书库');
+        // 只负责入库；加入哪个书单由书库卡片上的收藏图标选择
+        toast.success('已加入书库');
         onImported?.();
       } else {
-        toast.error(res?.message || res?.msg || '收藏失败');
+        toast.error(res?.message || res?.msg || '入库失败');
       }
     } catch {
       /* 拦截器已提示 */
@@ -244,18 +233,7 @@ export default function OnlineBooksPanel({
       const res = await importBookFromProviderService(token, source, detail.id, true, generateChapters);
       if (res.code === 200) {
         imported = true;
-        // 收藏 = 入库：文件绑定入库后再加入收藏
-        const localId = (res.data as { id?: number } | undefined)?.id;
-        let favorited = false;
-        if (localId) {
-          try {
-            const fav = await addFavoriteService({ bookId: localId, chapterId: 0 });
-            favorited = fav.code === 200;
-          } catch {
-            /* 忽略收藏失败 */
-          }
-        }
-        toast.success(favorited ? `已收藏并入库：${detail.title}` : `已入库：${detail.title}`);
+        toast.success(`已入库：${detail.title}`);
         setDetail(null);
         onImported?.();
       } else {
@@ -372,14 +350,14 @@ export default function OnlineBooksPanel({
                     fullWidth
                     size="small"
                     variant="contained"
-                    startIcon={<StarBorderRoundedIcon fontSize="small" />}
+                    startIcon={<LibraryAddRoundedIcon fontSize="small" />}
                     disabled={importingId === book.id}
                     onClick={(e) => {
                       e.stopPropagation();
                       void importBook(book);
                     }}
                   >
-                    收藏
+                    入库
                   </Button>
                 </Box>
               </Box>
@@ -484,11 +462,11 @@ export default function OnlineBooksPanel({
                 <Stack direction="row" spacing={1.5} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
                   <Button
                     variant="outlined"
-                    startIcon={<StarBorderRoundedIcon />}
+                    startIcon={<LibraryAddRoundedIcon />}
                     disabled={importingId === detail.id}
                     onClick={() => importBook(detail)}
                   >
-                    收藏并入库
+                    入库
                   </Button>
                   <Button
                     variant="contained"

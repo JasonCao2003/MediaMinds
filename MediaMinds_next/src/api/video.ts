@@ -174,6 +174,80 @@ export const deleteWatchRecordService = (movieId: number | string) =>
 
 export const clearWatchHistoryService = () => request.delete('/v1/video/history/clear');
 
+// ================== 播单 ==================
+
+export interface VideoList {
+  id?: number;
+  name: string;
+  description?: string;
+  movieCount?: number;
+  createTime?: string;
+  updateTime?: string;
+}
+
+/** 用户播单列表（含每单影片数） */
+export const getVideoListsService = () =>
+  request.get<ApiResult<VideoList[]>>('/v1/video/list');
+
+export const createVideoListService = (data: Partial<VideoList>) =>
+  request.post<ApiResult<VideoList>>('/v1/video/list', data);
+
+export const updateVideoListService = (id: number | string, data: Partial<VideoList>) =>
+  request.put<ApiResult<VideoList>>(`/v1/video/list/${id}`, data);
+
+export const deleteVideoListService = (id: number | string) =>
+  request.delete<ApiResult<void>>(`/v1/video/list/${id}`);
+
+/** 播单内的影片（后端按加入时间倒序返回） */
+export const getVideoListItemsService = (id: number | string) =>
+  request.get<ApiResult<Movie[]>>(`/v1/video/list/${id}/movies`);
+
+export const addMovieToListService = (listId: number | string, movieId: number | string) =>
+  request.post<ApiResult<void>>(`/v1/video/list/${listId}/movies/${movieId}`);
+
+export const removeMovieFromListService = (listId: number | string, movieId: number | string) =>
+  request.delete<ApiResult<void>>(`/v1/video/list/${listId}/movies/${movieId}`);
+
+/** movieId → 包含它的播单 ID 数组 */
+export const getVideoListMembershipService = () =>
+  request.get<ApiResult<Record<string, number[]>>>('/v1/video/list/membership');
+
+// ================== 第三方播放平台 ==================
+
+export interface MovieWatchProvider {
+  id: number;
+  name: string;
+  logo?: string;
+  /** flatrate / free / ads / rent / buy */
+  type: string;
+  typeLabel: string;
+}
+
+export interface MovieWatchProviderGroup {
+  type: string;
+  label: string;
+  providers: MovieWatchProvider[];
+}
+
+export interface MovieWatchProviders {
+  movieId?: number;
+  tmdbId?: number | null;
+  region?: string;
+  availableRegions?: string[];
+  /** TMDB / JustWatch 的地区观看页 */
+  link?: string;
+  providers: MovieWatchProvider[];
+  groups: MovieWatchProviderGroup[];
+  note?: string;
+}
+
+/** 按本地影片 ID 查 TMDB 登记的第三方播放平台 */
+export const getMovieWatchProvidersService = (movieId: number | string) =>
+  request.get<ApiResult<MovieWatchProviders>>('/v1/video/tmdb/watch-providers', {
+    params: { movieId },
+    timeout: 60000,
+  });
+
 // ================== TMDB 在线影视 ==================
 
 const TMDB_PREFIX = '/v1/video/tmdb';

@@ -101,6 +101,8 @@ export interface Movie {
   video?: string;
   /** 数据源标注：tmdb / manual / … */
   source?: string;
+  /** TMDB 影片 ID（第三方播放平台查询用） */
+  tmdbId?: number;
 }
 
 export interface Song {

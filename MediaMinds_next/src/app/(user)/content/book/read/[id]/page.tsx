@@ -1,12 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import {
   Box,
   Button,
   Card,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Drawer,
   IconButton,
@@ -28,20 +32,37 @@ import ArrowForwardIosRoundedIcon from '@mui/icons-material/ArrowForwardIosRound
 import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import StarBorderRoundedIcon from '@mui/icons-material/StarBorderRounded';
+import StarRoundedIcon from '@mui/icons-material/StarRounded';
+import LibraryBooksRoundedIcon from '@mui/icons-material/LibraryBooksRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import { toast } from '@/lib/notify';
 import { getReadingProgress, saveReadingProgress } from '@/lib/readingProgress';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { pushRecent } from '@/lib/recent';
+import {
+  ANNOTATION_COLORS,
+  addAnnotation,
+  getAnnotations,
+  removeAnnotationsInRange,
+  type AnnotationColor,
+  type ReaderAnnotation,
+} from '@/lib/readerAnnotations';
+import { analyzeTextService, type TextAnalysisResult } from '@/api/agent';
+import AgentAnalysisDialog from '@/components/common/AgentAnalysisDialog';
+import ReaderSelectionToolbar from '@/components/reader/ReaderSelectionToolbar';
+import AddToListDialog from '@/components/lists/AddToListDialog';
+import type { MediaListSummary } from '@/components/lists/MediaListPanel';
 import { useAuthStore } from '@/stores/authStore';
 import BookFileReader from '@/components/user/BookFileReader';
 import {
   getBookByIdService,
   getAllChaptersService,
   getChapterContentService,
-  addFavoriteService,
-  deleteFavoriteByBookService,
+  getBookListsService,
+  getBookListMembershipService,
+  addBookToListService,
+  type BookList,
 } from '@/api/book';
 import type { Book, Chapter } from '@/types';
 
@@ -64,6 +85,29 @@ const THEME_LABELS: Record<ReaderThemeKey, string> = {
 
 const SETTINGS_KEY = 'mm_reader_settings';
 
+interface ReaderTextSelection {
+  top: number;
+  left: number;
+  start: number;
+  end: number;
+  text: string;
+}
+
+/** 从选区端点向上找段落下标；无论端点在文本节点还是嵌套 span 里都能命中 */
+function paragraphElement(node: Node | null): HTMLElement | null {
+  if (!node) return null;
+  const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+  return (element?.closest('[data-reader-p]') as HTMLElement | null) ?? null;
+}
+
+/** 区间端点在一段文字里的字符偏移 */
+function offsetInside(element: HTMLElement, container: Node, offset: number): number {
+  const pre = document.createRange();
+  pre.selectNodeContents(element);
+  pre.setEnd(container, offset);
+  return pre.toString().length;
+}
+
 export default function BookReaderPage() {
   const params = useParams<{ id: string }>();
   const search = useSearchParams();
@@ -81,6 +125,24 @@ export default function BookReaderPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchChapter, setSearchChapter] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // 加入书单（阅读器里的收藏按钮不再直接收藏本章）
+  const [bookLists, setBookLists] = useState<BookList[]>([]);
+  const [inAnyList, setInAnyList] = useState(false);
+  const [addToListOpen, setAddToListOpen] = useState(false);
+
+  // 划线与笔记（localStorage，按章节隔离）
+  const [annotations, setAnnotations] = useState<ReaderAnnotation[]>([]);
+  const [selection, setSelection] = useState<ReaderTextSelection | null>(null);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [noteTarget, setNoteTarget] = useState<ReaderTextSelection | null>(null);
+
+  // Agent 选段分析
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<TextAnalysisResult | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const [settings, setSettings] = useState<ReaderSettings>({
     fontSize: 18,
@@ -191,6 +253,210 @@ export default function BookReaderPage() {
     [content],
   );
 
+  /** 标注按「书 + 章节」隔离；切章后重新读取本地记录 */
+  const annotationKey = currentChapter?.id != null ? `${bookId}:chapter:${currentChapter.id}` : '';
+
+  useEffect(() => {
+    setAnnotations(annotationKey ? getAnnotations(annotationKey) : []);
+    setSelection(null);
+  }, [annotationKey]);
+
+  /** 每个段落在整章纯文本里的起始下标（段落之间按一个换行计算） */
+  const paragraphStarts = useMemo(() => {
+    let offset = 0;
+    return paragraphs.map((p) => {
+      const start = offset;
+      offset += p.length + 1;
+      return start;
+    });
+  }, [paragraphs]);
+
+  const fullText = useMemo(() => paragraphs.join('\n'), [paragraphs]);
+
+  /** 根据浏览器选区计算整章字符区间，并把工具条定位到选区下方 */
+  const captureSelection = useCallback(() => {
+    const root = contentRef.current;
+    const sel = window.getSelection();
+    if (!root || !sel || sel.rangeCount === 0 || sel.isCollapsed) {
+      setSelection(null);
+      return;
+    }
+
+    const range = sel.getRangeAt(0);
+    if (!root.contains(range.commonAncestorContainer)) {
+      setSelection(null);
+      return;
+    }
+
+    const startEl = paragraphElement(range.startContainer);
+    const endEl = paragraphElement(range.endContainer);
+    if (!startEl || !endEl) {
+      setSelection(null);
+      return;
+    }
+
+    const startP = Number(startEl.getAttribute('data-reader-p'));
+    const endP = Number(endEl.getAttribute('data-reader-p'));
+    if (!Number.isFinite(startP) || !Number.isFinite(endP)) {
+      setSelection(null);
+      return;
+    }
+
+    const start = (paragraphStarts[startP] ?? 0) + offsetInside(startEl, range.startContainer, range.startOffset);
+    const end = (paragraphStarts[endP] ?? 0) + offsetInside(endEl, range.endContainer, range.endOffset);
+    const text = fullText.slice(start, end);
+    if (end <= start || !text.trim()) {
+      setSelection(null);
+      return;
+    }
+
+    const rect = range.getBoundingClientRect();
+    const half = 195;
+    const left = Math.min(Math.max(16 + half, rect.left + rect.width / 2), window.innerWidth - 16 - half);
+    const top = rect.bottom + 10 > window.innerHeight - 72 ? rect.top - 58 : rect.bottom + 10;
+    setSelection({ top, left, start, end, text });
+  }, [fullText, paragraphStarts]);
+
+  // 点工具条以外的地方收起；工具条自身会阻止 mousedown 默认行为
+  useEffect(() => {
+    if (!selection) return;
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest('[data-reader-toolbar]')) return;
+      setSelection(null);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [selection]);
+
+  const applyAnnotationColor = (color: AnnotationColor) => {
+    if (!selection || !annotationKey) return;
+    setAnnotations(
+      addAnnotation(annotationKey, {
+        start: selection.start,
+        end: selection.end,
+        quote: selection.text,
+        color,
+      }),
+    );
+    setSelection(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
+  const openNoteDialog = () => {
+    if (!selection) return;
+    setNoteTarget(selection);
+    setNoteDraft('');
+    setNoteOpen(true);
+    setSelection(null);
+  };
+
+  const saveNote = () => {
+    if (!noteTarget || !annotationKey || !noteDraft.trim()) {
+      toast.info('请输入笔记内容');
+      return;
+    }
+    setAnnotations(
+      addAnnotation(annotationKey, {
+        start: noteTarget.start,
+        end: noteTarget.end,
+        quote: noteTarget.text,
+        note: noteDraft.trim(),
+      }),
+    );
+    setNoteOpen(false);
+    setNoteTarget(null);
+    setNoteDraft('');
+    toast.success('笔记已添加');
+  };
+
+  const analyzeSelection = async () => {
+    if (!selection) return;
+    const target = selection;
+    setSelection(null);
+    setAnalysisOpen(true);
+    setAnalysisLoading(true);
+    setAnalysisResult(null);
+    setAnalysisError(null);
+    try {
+      const res = await analyzeTextService({
+        kind: 'passage',
+        title: book?.bookName || book?.title,
+        context: currentChapter?.chapterTitle,
+        text: target.text,
+      });
+      setAnalysisResult(res.data);
+    } catch (e) {
+      setAnalysisError((e as { message?: string })?.message || '分析失败，请稍后重试');
+    } finally {
+      setAnalysisLoading(false);
+    }
+  };
+
+  const clearSelectionAnnotations = () => {
+    if (!selection || !annotationKey) return;
+    setAnnotations(removeAnnotationsInRange(annotationKey, selection.start, selection.end));
+    setSelection(null);
+    window.getSelection()?.removeAllRanges();
+    toast.success('已清除选区内的标记');
+  };
+
+  /** 把一段正文按标注边界切成 span；笔记用波浪线，颜色用背景 */
+  const renderParagraph = (text: string, index: number) => {
+    const pStart = paragraphStarts[index] ?? 0;
+    const pEnd = pStart + text.length;
+    const relevant = annotations.filter((a) => a.start < pEnd && a.end > pStart);
+    if (relevant.length === 0) return text;
+
+    const points = Array.from(
+      new Set([
+        0,
+        text.length,
+        ...relevant.flatMap((a) => [
+          Math.max(0, Math.min(text.length, a.start - pStart)),
+          Math.max(0, Math.min(text.length, a.end - pStart)),
+        ]),
+      ]),
+    ).sort((a, b) => a - b);
+
+    const nodes: ReactNode[] = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const from = points[i];
+      const to = points[i + 1];
+      if (from >= to) continue;
+      const active = relevant.filter((a) => a.start < pStart + to && a.end > pStart + from);
+      if (active.length === 0) {
+        nodes.push(text.slice(from, to));
+        continue;
+      }
+
+      const color = active.find((a) => a.color)?.color;
+      const note = active.find((a) => a.note)?.note;
+      const sx = {
+        backgroundColor: color ? ANNOTATION_COLORS[color].css : undefined,
+        textDecoration: note ? 'underline wavy var(--mm-accent-text)' : undefined,
+        textDecorationThickness: note ? '2px' : undefined,
+        textUnderlineOffset: note ? '4px' : undefined,
+        cursor: note ? 'help' : 'inherit',
+      };
+      const span = (
+        <Box component="span" key={`${index}-${from}-${to}`} sx={sx}>
+          {text.slice(from, to)}
+        </Box>
+      );
+      nodes.push(
+        note ? (
+          <Tooltip key={`note-${index}-${from}-${to}`} title={note} arrow>
+            {span}
+          </Tooltip>
+        ) : (
+          span
+        ),
+      );
+    }
+    return nodes;
+  };
+
   // 阅读时长：正文加载完成且页面可见时计时（切走标签页 / 离开页面自动停）
   useActivityTracker('book', !loading && paragraphs.length > 0);
 
@@ -205,12 +471,50 @@ export default function BookReaderPage() {
     });
   }, [book]);
 
-  const toggleFavoriteChapter = async () => {
-    if (!currentChapter) return;
-    const res = await addFavoriteService({ bookId: Number(bookId), chapterId: currentChapter.id });
-    if (res.code === 200) toast.success('已收藏本章');
-    else toast.info('当前章节已在收藏中');
+  const loadListState = useCallback(async () => {
+    if (!bookId) return;
+    try {
+      const [listsRes, membershipRes] = await Promise.all([
+        getBookListsService(),
+        getBookListMembershipService(),
+      ]);
+      setBookLists((listsRes.data as BookList[]) || []);
+      setInAnyList(((membershipRes.data || {})[String(bookId)]?.length ?? 0) > 0);
+    } catch {
+      /* ignore */
+    }
+  }, [bookId]);
+
+  useEffect(() => {
+    loadListState();
+  }, [loadListState]);
+
+  const addToBookList = async (listId: number) => {
+    try {
+      const res = await addBookToListService(listId, bookId);
+      if (res.code === 200) {
+        toast.success('已加入书单');
+        await loadListState();
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
   };
+
+  const listSummaries = useMemo<MediaListSummary[]>(
+    () =>
+      bookLists
+        .filter((list) => list.id != null)
+        .map((list) => ({
+          id: Number(list.id),
+          name: list.name,
+          description: list.description,
+          count: Number(list.bookCount ?? 0),
+        })),
+    [bookLists],
+  );
 
   /** 阅读底色：全部由设计令牌派生，不引入写死的底色 */
   const THEMES = useMemo<Record<ReaderThemeKey, { bg: string; fg: string }>>(
@@ -259,10 +563,10 @@ export default function BookReaderPage() {
           <Typography variant="subtitle1" fontWeight={700} sx={{ flex: 1, minWidth: 0 }} noWrap>
             {book?.bookName || book?.title || '阅读'}
           </Typography>
-          <Tooltip title="收藏本章">
+          <Tooltip title={inAnyList ? '已在书单中，点击加入其他书单' : '加入书单'}>
             <span>
-              <IconButton onClick={toggleFavoriteChapter} disabled={!currentChapter} aria-label="收藏本章">
-                <StarBorderRoundedIcon />
+              <IconButton onClick={() => setAddToListOpen(true)} aria-label="加入书单">
+                {inAnyList ? <StarRoundedIcon /> : <StarBorderRoundedIcon />}
               </IconButton>
             </span>
           </Tooltip>
@@ -282,6 +586,8 @@ export default function BookReaderPage() {
       {/* 正文：灰底「纸面」+ 描边，保持阅读区安静 */}
       <Box
         ref={contentRef}
+        onMouseUp={() => window.setTimeout(captureSelection, 0)}
+        onKeyUp={() => window.setTimeout(captureSelection, 0)}
         sx={{
           mx: 'auto',
           width: '100%',
@@ -337,6 +643,7 @@ export default function BookReaderPage() {
               <Typography
                 key={i}
                 component="p"
+                data-reader-p={i}
                 sx={{
                   fontSize: settings.fontSize,
                   lineHeight: settings.lineHeight,
@@ -344,7 +651,7 @@ export default function BookReaderPage() {
                   textIndent: '2em',
                 }}
               >
-                {p}
+                {renderParagraph(p, i)}
               </Typography>
             ))}
             <Divider sx={{ my: 4 }} />
@@ -372,6 +679,96 @@ export default function BookReaderPage() {
           </Box>
         )}
       </Box>
+
+      {annotations.some((a) => a.note) && (
+        <Card sx={{ mt: 2, p: 2.5, borderRadius: 'var(--mm-radius-lg)' }}>
+          <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1.5 }}>
+            本章笔记
+          </Typography>
+          <Stack spacing={1.5}>
+            {annotations
+              .filter((a) => a.note)
+              .map((a) => (
+                <Box key={a.id}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    “{a.quote}”
+                  </Typography>
+                  <Typography variant="body2">{a.note}</Typography>
+                </Box>
+              ))}
+          </Stack>
+        </Card>
+      )}
+
+      {selection && (
+        <ReaderSelectionToolbar
+          menu={{ top: selection.top, left: selection.left }}
+          onColor={applyAnnotationColor}
+          onNote={openNoteDialog}
+          onAnalyze={analyzeSelection}
+          onClear={clearSelectionAnnotations}
+        />
+      )}
+
+      {/* 添加笔记：笔记保存后用波浪线标在原文下方 */}
+      <Dialog open={noteOpen} onClose={() => setNoteOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800 }}>添加笔记</DialogTitle>
+        <DialogContent>
+          <Box
+            sx={{
+              p: 1.5,
+              mb: 2,
+              bgcolor: 'var(--mm-sunken)',
+              boxShadow: 'var(--mm-sunken-sm)',
+              maxHeight: 140,
+              overflowY: 'auto',
+            }}
+          >
+            <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+              {noteTarget?.text}
+            </Typography>
+          </Box>
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            minRows={4}
+            label="笔记"
+            value={noteDraft}
+            onChange={(e) => setNoteDraft(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setNoteOpen(false)}>取消</Button>
+          <Button variant="contained" onClick={saveNote}>
+            保存
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <AgentAnalysisDialog
+        open={analysisOpen}
+        title={`内容分析 · ${currentChapter?.chapterTitle || '选段'}`}
+        loading={analysisLoading}
+        result={analysisResult}
+        error={analysisError}
+        onClose={() => setAnalysisOpen(false)}
+      />
+
+      <AddToListDialog
+        open={addToListOpen}
+        title="加入书单"
+        itemTitle={book?.bookName || book?.title}
+        lists={listSummaries}
+        unit="本"
+        icon={<LibraryBooksRoundedIcon />}
+        onAdd={addToBookList}
+        onClose={() => setAddToListOpen(false)}
+        onCreate={() => {
+          setAddToListOpen(false);
+          router.push('/content/book');
+        }}
+      />
 
       {/* 目录抽屉 */}
       <Drawer

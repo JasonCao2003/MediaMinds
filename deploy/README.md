@@ -74,12 +74,13 @@ docker exec -i mm-mysql mysql -uroot -p123456 < deploy/mysql-init/01_user_db.sql
 ```bash
 export TMDB_ACCESS_TOKEN="<TMDB v4 Read Access Token>"
 export TMDB_API_KEY="<TMDB v3 API Key>"        # 与上一项二选一
+export TMDB_WATCH_REGION="CN"                   # 可选：第三方播放平台优先地区（默认 CN）
 export KUGOU_TOKEN=""                           # 可选：酷狗登录态，用于解析 VIP 曲目直链
 export DEEPSEEK_API_KEY="sk-xxxxxx"             # 智能入库 Agent 的大模型 Key（LangChain4j）
 export GOOGLE_BOOKS_API_KEY="AIza..."           # 可选：Google Books 图书检索配额（不填走匿名配额）
 ```
 
-配置后 `video-service` 即可使用 `/v1/video/tmdb/*` 搜索与导入影视。
+配置后 `video-service` 即可使用 `/v1/video/tmdb/*` 搜索、导入影视，以及查询第三方播放平台（`/v1/video/tmdb/watch-providers`）。
 
 配置 `GOOGLE_BOOKS_API_KEY` 后，`book-service` 的 `/v1/book/google/*` 走已鉴权配额
 （匿名调用在共享出口 IP 上很容易触发 `429`）。改动后需**重启 `book-service`** 才会生效——

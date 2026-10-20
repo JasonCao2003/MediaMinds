@@ -17,10 +17,13 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -121,6 +124,12 @@ public class TmdbService {
         Movie existing = movieMapper.selectOne(
                 new LambdaQueryWrapper<Movie>().eq(Movie::getName, title).last("LIMIT 1"));
         if (existing != null) {
+            // 老数据可能没有 tmdb_id：重新导入时顺手补齐，供第三方播放源查询
+            if (existing.getTmdbId() == null) {
+                existing.setTmdbId(tmdbId);
+                existing.setUpdateTime(LocalDateTime.now());
+                movieMapper.updateById(existing);
+            }
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("existed", true);
             result.put("movie", existing);
@@ -150,6 +159,7 @@ public class TmdbService {
         movie.setArea(resolveArea(detail));
         movie.setVideo("");
         movie.setSource("TMDB");
+        movie.setTmdbId(tmdbId);
         LocalDateTime now = LocalDateTime.now();
         movie.setCreateTime(now);
         movie.setUpdateTime(now);
@@ -216,6 +226,219 @@ public class TmdbService {
             case "US" -> 3;
             default -> 2;
         };
+    }
+
+    // ============================================================
+    // 第三方播放平台
+    // ============================================================
+
+    /**
+     * 查询本地影片在 TMDB 上登记的第三方观看平台。
+     *
+     * <p>新导入的 TMDB 影片直接有 tmdb_id；老数据没有时按标题回查一次并回填，
+     * 这样不用手工维护「本地影片 → TMDB ID」的映射。
+     */
+    public Map<String, Object> watchProviders(Long movieId) {
+        Movie movie = movieMapper.selectById(movieId);
+        if (movie == null) {
+            throw new IllegalArgumentException("影片不存在");
+        }
+
+        Long tmdbId = movie.getTmdbId();
+        if (tmdbId == null) {
+            tmdbId = resolveTmdbId(movie);
+            if (tmdbId != null) {
+                movie.setTmdbId(tmdbId);
+                movie.setUpdateTime(LocalDateTime.now());
+                movieMapper.updateById(movie);
+            }
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("movieId", movieId);
+        result.put("tmdbId", tmdbId);
+        result.put("region", props.getWatchRegion());
+
+        if (tmdbId == null) {
+            result.put("link", tmdbSearchUrl(movie.getName()));
+            result.put("providers", List.of());
+            result.put("groups", List.of());
+            result.put("note", "未找到该影片的 TMDB 记录，无法获取第三方播放平台");
+            return result;
+        }
+
+        JsonNode raw;
+        try {
+            raw = client.watchProviders(tmdbId);
+        } catch (Exception e) {
+            result.put("link", "https://www.themoviedb.org/movie/" + tmdbId);
+            result.put("providers", List.of());
+            result.put("groups", List.of());
+            result.put("note", "TMDB 播放平台查询失败：" + e.getMessage());
+            return result;
+        }
+        JsonNode results = raw.path("results");
+        String region = chooseRegion(results, props.getWatchRegion());
+        JsonNode regionNode = results.path(region);
+        String link = text(regionNode, "link");
+        if (link.isEmpty()) {
+            link = "https://www.themoviedb.org/movie/" + tmdbId + "/watch?locale=" + region;
+        }
+
+        List<String> availableRegions = new ArrayList<>();
+        Iterator<String> names = results.fieldNames();
+        while (names.hasNext()) {
+            availableRegions.add(names.next());
+        }
+
+        List<Map<String, Object>> groups = new ArrayList<>();
+        List<Map<String, Object>> providers = new ArrayList<>();
+        String[][] types = {
+                {"flatrate", "订阅"},
+                {"free", "免费"},
+                {"ads", "含广告"},
+                {"rent", "租借"},
+                {"buy", "购买"}
+        };
+        for (String[] type : types) {
+            JsonNode list = regionNode.path(type[0]);
+            if (!list.isArray() || list.isEmpty()) {
+                continue;
+            }
+            List<Map<String, Object>> groupProviders = new ArrayList<>();
+            for (JsonNode provider : list) {
+                String name = provider.path("provider_name").asText("");
+                if (name.isEmpty()) {
+                    continue;
+                }
+                String logoPath = provider.path("logo_path").asText("");
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("id", provider.path("provider_id").asLong());
+                item.put("name", name);
+                item.put("logo", logoPath.isEmpty() ? "" : TmdbProperties.IMAGE_BASE + "w92" + logoPath);
+                item.put("type", type[0]);
+                item.put("typeLabel", type[1]);
+                groupProviders.add(item);
+                providers.add(item);
+            }
+            if (!groupProviders.isEmpty()) {
+                Map<String, Object> group = new LinkedHashMap<>();
+                group.put("type", type[0]);
+                group.put("label", type[1]);
+                group.put("providers", groupProviders);
+                groups.add(group);
+            }
+        }
+
+        result.put("region", region);
+        result.put("availableRegions", availableRegions);
+        result.put("link", link);
+        result.put("providers", providers);
+        result.put("groups", groups);
+        if (providers.isEmpty()) {
+            result.put("note", "TMDB 暂未收录该地区（" + region + "）的播放平台");
+        }
+        return result;
+    }
+
+    /** 老数据没有 tmdb_id：按标题搜索一次，优先精确标题 + 年份匹配 */
+    private Long resolveTmdbId(Movie movie) {
+        String title = cleanTitle(movie.getName());
+        if (title.isBlank()) {
+            return null;
+        }
+        JsonNode raw;
+        try {
+            raw = client.searchMovie(title, 1);
+        } catch (Exception e) {
+            return null;
+        }
+        JsonNode results = raw.path("results");
+        if (!results.isArray() || results.isEmpty()) {
+            return null;
+        }
+
+        String wanted = normalizeTitle(title);
+        int wantedYear = movie.getShowTime() == null ? 0 : movie.getShowTime().getYear();
+        Long bestId = null;
+        int bestScore = -1;
+        for (JsonNode item : results) {
+            String itemTitle = text(item, "title", "original_title");
+            String normalizedItem = normalizeTitle(itemTitle);
+            if (normalizedItem.isEmpty()) {
+                continue;
+            }
+            int score = 0;
+            if (normalizedItem.equals(wanted)) {
+                score += 100;
+            } else if (normalizedItem.contains(wanted) || wanted.contains(normalizedItem)) {
+                score += 50;
+            }
+            String release = text(item, "release_date");
+            if (wantedYear > 0 && release.length() >= 4) {
+                try {
+                    if (Integer.parseInt(release.substring(0, 4)) == wantedYear) {
+                        score += 40;
+                    }
+                } catch (NumberFormatException ignored) {
+                    // 日期不合法时不影响标题匹配
+                }
+            }
+            if (score > bestScore) {
+                bestScore = score;
+                bestId = item.path("id").asLong();
+            }
+        }
+        return bestScore > 0 && bestId != null && bestId > 0 ? bestId : null;
+    }
+
+    private String chooseRegion(JsonNode results, String preferred) {
+        if (hasProviders(results.path(preferred))) {
+            return preferred;
+        }
+        // 常见地区兜底；仍找不到就取第一个有平台数据的地区
+        for (String fallback : List.of("US", "HK", "TW", "JP", "GB")) {
+            if (hasProviders(results.path(fallback))) {
+                return fallback;
+            }
+        }
+        Iterator<String> names = results.fieldNames();
+        while (names.hasNext()) {
+            String region = names.next();
+            if (hasProviders(results.path(region))) {
+                return region;
+            }
+        }
+        return preferred;
+    }
+
+    private boolean hasProviders(JsonNode regionNode) {
+        if (regionNode == null || !regionNode.isObject()) {
+            return false;
+        }
+        for (String key : List.of("flatrate", "free", "ads", "rent", "buy")) {
+            JsonNode list = regionNode.path(key);
+            if (list.isArray() && !list.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String cleanTitle(String value) {
+        if (value == null) return "";
+        return value.replaceAll("\\s*[（(]\\d{4}[)）]\\s*$", "").trim();
+    }
+
+    private static String normalizeTitle(String value) {
+        return value == null ? "" : value.toLowerCase()
+                .replaceAll("\\s+", "")
+                .replaceAll("[\\p{Punct}，。！？、：；（）()《》·]", "");
+    }
+
+    private static String tmdbSearchUrl(String title) {
+        return "https://www.themoviedb.org/search?query="
+                + URLEncoder.encode(title == null ? "" : title, StandardCharsets.UTF_8);
     }
 
     /** 批量导入，返回成功/已存在/失败明细 */

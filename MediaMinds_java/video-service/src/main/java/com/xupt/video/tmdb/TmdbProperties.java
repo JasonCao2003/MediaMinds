@@ -37,6 +37,10 @@ public class TmdbProperties {
     @Value("${tmdb.import-download-image:true}")
     private boolean importDownloadImage;
 
+    /** 第三方播放平台优先展示的地区（TMDB watch/providers 的 locale） */
+    @Value("${tmdb.watch-region:CN}")
+    private String watchRegion;
+
     public String getApiKey() {
         return apiKey == null ? "" : apiKey.trim();
     }
@@ -59,6 +63,10 @@ public class TmdbProperties {
 
     public boolean isImportDownloadImage() {
         return importDownloadImage;
+    }
+
+    public String getWatchRegion() {
+        return (watchRegion == null || watchRegion.isBlank()) ? "CN" : watchRegion.trim().toUpperCase();
     }
 
     public boolean isConfigured() {

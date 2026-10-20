@@ -23,7 +23,6 @@ import {
 } from '@mui/material';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import PlaylistAddRoundedIcon from '@mui/icons-material/PlaylistAddRounded';
-import FavoriteBorderRoundedIcon from '@mui/icons-material/FavoriteBorderRounded';
 import LyricsRoundedIcon from '@mui/icons-material/LyricsRounded';
 import MusicNoteRoundedIcon from '@mui/icons-material/MusicNoteRounded';
 import AlbumRoundedIcon from '@mui/icons-material/AlbumRounded';
@@ -31,7 +30,6 @@ import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import EmptyState from '@/components/common/EmptyState';
 import CoverImage from '@/components/common/CoverImage';
 import { toast } from '@/lib/notify';
-import { addCollectionService } from '@/api/music';
 import { usePlayerStore } from '@/stores/playerStore';
 import {
   searchKugouService,
@@ -338,30 +336,6 @@ export default function KugouPanel({
     duration: song.duration || 0,
   });
 
-  /** 收藏 = 入库：先导入本地曲库，再加入收藏（特殊歌单） */
-  const collectSong = async (song: KugouSong) => {
-    if (!song.hash) return;
-    const res = await importKugouSongService(importPayload(song));
-    const created = res.data as unknown as { id?: number } | undefined;
-    if (res.code === 200 && created?.id != null) {
-      let favorited = false;
-      try {
-        const fav = await addCollectionService('0', created.id);
-        favorited = fav.code === 200;
-      } catch {
-        /* 已收藏或收藏失败都不影响入库 */
-      }
-      toast.success(favorited ? '已收藏并加入曲库' : '已加入曲库');
-      // 导入会创建歌手，刷新后本地列表才不会显示「未知歌手」
-      onImported?.();
-    } else if (res.code === 200) {
-      toast.success('已加入曲库');
-      onImported?.();
-    } else {
-      toast.error((res as { message?: string }).message || '收藏失败');
-    }
-  };
-
   /** 加入歌单：先导入本地（后端按「歌名 + 歌手」去重）拿到 song.id，再交给外层选择歌单 */
   const addSongToPlaylist = async (song: KugouSong) => {
     const hash = song.hash;
@@ -523,11 +497,6 @@ export default function KugouPanel({
                       <PlaylistAddRoundedIcon fontSize="small" />
                     </IconButton>
                   </span>
-                </Tooltip>
-                <Tooltip title="收藏（会先加入曲库）">
-                  <IconButton onClick={() => collectSong(song)} aria-label="收藏">
-                    <FavoriteBorderRoundedIcon fontSize="small" />
-                  </IconButton>
                 </Tooltip>
               </Stack>
             }

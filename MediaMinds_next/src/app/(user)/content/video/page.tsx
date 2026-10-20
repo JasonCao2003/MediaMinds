@@ -29,20 +29,29 @@ import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CategoryRoundedIcon from '@mui/icons-material/CategoryRounded';
 import LocalOfferRoundedIcon from '@mui/icons-material/LocalOfferRounded';
+import VideoLibraryRoundedIcon from '@mui/icons-material/VideoLibraryRounded';
 import EmptyState from '@/components/common/EmptyState';
 import CoverImage from '@/components/common/CoverImage';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import TmdbPanel from '@/components/user/TmdbPanel';
 import { toast } from '@/lib/notify';
 import { normalizePage } from '@/lib/page';
+import { getRecent } from '@/lib/recent';
 import {
   getMovieListService,
   searchMovieService,
   getAllCategoriesService,
   getMoviesByCategoryIdService,
-  getVideoFavoriteListService,
   getWatchHistoryService,
-  addVideoFavoriteService,
-  cancelVideoFavoriteService,
+  getVideoListsService,
+  createVideoListService,
+  updateVideoListService,
+  deleteVideoListService,
+  getVideoListItemsService,
+  addMovieToListService,
+  removeMovieFromListService,
+  getVideoListMembershipService,
+  type VideoList,
   addMovieService,
   updateMovieService,
   deleteMovieService,
@@ -59,8 +68,11 @@ import { MOVIE_FIELDS, toMoviePayload } from '@/lib/movieForm';
 import FormDialog, { type FormField } from '@/components/manage/FormDialog';
 import DimensionDialog, { type DimensionItem } from '@/components/manage/DimensionDialog';
 import { useCrud } from '@/components/manage/useCrud';
+import MediaListPanel, { type MediaListSummary } from '@/components/lists/MediaListPanel';
+import AddToListDialog from '@/components/lists/AddToListDialog';
+import ListItemsDialog, { type MediaListItem } from '@/components/lists/ListItemsDialog';
 
-type VideoView = 'recent' | 'all' | 'favorite' | 'online';
+type VideoView = 'recent' | 'lists' | 'all' | 'online';
 
 const DIMENSION_LABEL: Record<TmdbDimension, string> = {
   title: '片名',
@@ -80,6 +92,8 @@ interface MovieItem {
   cover?: string;
   abs?: string;
   showTime?: string;
+  /** 本地最近观看快照的时间戳（服务端历史记录没有这个字段） */
+  recentAt?: number;
 }
 
 const PAGE_SIZE = 12;
@@ -95,8 +109,8 @@ const SORT_OPTIONS: { value: VideoSortKey; label: string }[] = [
   { value: 'name-asc', label: '片名 A → Z' },
 ];
 
-/** 「最近添加」「最近观看」各取 3 个（一行三个），不分页 */
-const RECENT_SIZE = 3;
+/** 「最近观看」只取一页（12 条），不分页 */
+const RECENT_SIZE = 12;
 
 const CATEGORY_FIELDS: FormField[] = [
   { name: 'name', label: '分类名', required: true, maxLength: 50 },
@@ -109,10 +123,15 @@ const TAG_FIELDS: FormField[] = [
   { name: 'description', label: '描述', maxLength: 255 },
 ];
 
+const LIST_FIELDS: FormField[] = [
+  { name: 'name', label: '播单名', required: true, maxLength: 100 },
+  { name: 'description', label: '描述', maxLength: 500 },
+];
+
 export default function VideoViewPage() {
   const router = useRouter();
+  const confirm = useConfirm();
   const [movies, setMovies] = useState<MovieItem[]>([]);
-  const [favorites, setFavorites] = useState<MovieItem[]>([]);
   const [categories, setCategories] = useState<Record<string, unknown>[]>([]);
   const [tags, setTags] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(false);
@@ -120,7 +139,6 @@ export default function VideoViewPage() {
   const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [categoryId, setCategoryId] = useState<number | null>(null);
-  const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
   const [view, setView] = useState<VideoView>('recent');
   /** 库的排序：默认按添加顺序（最新在最上） */
   const [sortKey, setSortKey] = useState<VideoSortKey>('createTime-desc');
@@ -136,6 +154,19 @@ export default function VideoViewPage() {
   const [movieFormOpen, setMovieFormOpen] = useState(false);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [tagDialogOpen, setTagDialogOpen] = useState(false);
+
+  // 播单
+  const [videoLists, setVideoLists] = useState<VideoList[]>([]);
+  const [listMembership, setListMembership] = useState<Record<string, number[]>>({});
+  const [videoListsLoading, setVideoListsLoading] = useState(false);
+  const [addToListOpen, setAddToListOpen] = useState(false);
+  const [listTarget, setListTarget] = useState<MovieItem | null>(null);
+  const [listFormOpen, setListFormOpen] = useState(false);
+  const [editingList, setEditingList] = useState<VideoList | null>(null);
+  const [listItemsOpen, setListItemsOpen] = useState(false);
+  const [activeList, setActiveList] = useState<VideoList | null>(null);
+  const [listItems, setListItems] = useState<MovieItem[]>([]);
+  const [listItemsLoading, setListItemsLoading] = useState(false);
 
   const mapMovie = useCallback(
     (raw: Record<string, unknown>): MovieItem => ({
@@ -202,41 +233,71 @@ export default function VideoViewPage() {
     }
   }, [mapMovie]);
 
-  /** 观看历史：后端已按 last_watch_time 倒序，取前 RECENT_SIZE 条 */
+  /**
+   * 观看历史：本地快照 + 服务端记录合并。
+   *
+   * <p>播放页开始播放时会立即写 localStorage，但服务端记录每 15 秒才保存一次，
+   * 短暂观看后返回列表可能来不及落库。因此本地快照优先展示，再用服务端记录补齐。
+   */
   const loadWatchHistory = useCallback(async () => {
+    const local = getRecent('video')
+      .map((r) => ({
+        id: Number(r.id),
+        name: r.title,
+        directedBy: r.subtitle,
+        pic: r.cover,
+        recentAt: r.at,
+      }))
+      .filter((m) => Number.isFinite(m.id));
+
     try {
       const res = (await getWatchHistoryService(1, RECENT_SIZE)) as {
         data?: { records?: Record<string, unknown>[] };
       };
-      setWatchedMovies((res?.data?.records ?? []).map(mapMovie));
+      const server = (res?.data?.records ?? []).map(mapMovie);
+      const seen = new Set(local.map((m) => m.id));
+      setWatchedMovies([...local, ...server.filter((m) => !seen.has(m.id))].slice(0, RECENT_SIZE));
     } catch {
-      setWatchedMovies([]);
+      setWatchedMovies(local.slice(0, RECENT_SIZE));
     }
   }, [mapMovie]);
 
+  // 从播放页返回 / 切回标签页时刷新「最近」：不依赖页面是否重新挂载
+  useEffect(() => {
+    if (view !== 'recent') return;
+    const refresh = () => loadWatchHistory();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [view, loadWatchHistory]);
 
-  const loadFavoriteMovies = useCallback(async () => {
-    setLoading(true);
+  /** 播单列表 + 每部影片所在播单（用于点亮收藏图标） */
+  const loadLists = useCallback(async () => {
+    setVideoListsLoading(true);
     try {
-      const res = await getVideoFavoriteListService(page, PAGE_SIZE);
-      const { rows, total: t } = normalizePage<Record<string, unknown>>(res);
-      setFavorites(rows.map(mapMovie));
-      setTotal(t);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, mapMovie]);
-
-  /** 一次拉取收藏列表，避免逐个影片查询 */
-  const loadFavorites = useCallback(async () => {
-    try {
-      const res = await getVideoFavoriteListService(1, 500);
-      const { rows } = normalizePage<Record<string, unknown>>(res);
-      setFavoriteIds(rows.map((r) => Number(r.id)).filter(Boolean));
+      const [listsRes, membershipRes] = await Promise.all([
+        getVideoListsService(),
+        getVideoListMembershipService(),
+      ]);
+      setVideoLists((listsRes.data as VideoList[]) || []);
+      setListMembership(membershipRes.data || {});
     } catch {
       /* ignore */
+    } finally {
+      setVideoListsLoading(false);
     }
   }, []);
+
+  const isInAnyList = useCallback(
+    (movieId: number) => (listMembership[String(movieId)]?.length ?? 0) > 0,
+    [listMembership],
+  );
 
   const reloadCategories = useCallback(async () => {
     try {
@@ -260,9 +321,9 @@ export default function VideoViewPage() {
   const reloadList = useCallback(() => {
     if (view === 'recent') {
       loadWatchHistory();
-    } else if (view === 'favorite') loadFavoriteMovies();
+    } else if (view === 'lists') loadLists();
     else if (view === 'all') loadMovies();
-  }, [view, loadMovies, loadRecentAdded, loadFavoriteMovies, loadWatchHistory]);
+  }, [view, loadMovies, loadRecentAdded, loadLists, loadWatchHistory]);
 
   const movieCrud = useCrud({
     create: (v) => addMovieService(v as Partial<Movie>),
@@ -290,12 +351,12 @@ export default function VideoViewPage() {
   useEffect(() => {
     reloadCategories();
     reloadTags();
-    loadFavorites();
-  }, [reloadCategories, reloadTags, loadFavorites]);
+    loadLists();
+  }, [reloadCategories, reloadTags, loadLists]);
 
   useEffect(() => {
-    if (view === 'favorite') {
-      loadFavoriteMovies();
+    if (view === 'lists') {
+      loadLists();
       return;
     }
     if (view === 'recent') {
@@ -308,30 +369,135 @@ export default function VideoViewPage() {
       return;
     }
     loadMovies();
-  }, [view, loadMovies, loadRecentAdded, loadFavoriteMovies, loadWatchHistory]);
+  }, [view, loadMovies, loadRecentAdded, loadLists, loadWatchHistory]);
 
-  /** 「最近观看」的本地快照 → 卡片数据（把最近时间放进描述字段展示） */
-  /** 普通网格（全部 / 收藏）的数据 */
-  const display = useMemo<MovieItem[]>(
-    () => (view === 'favorite' ? favorites : movies),
-    [view, movies, favorites],
-  );
+  /** 普通网格（全部）的数据 */
+  const display = useMemo<MovieItem[]>(() => movies, [movies]);
 
-  const toggleFavorite = async (movie: MovieItem) => {
-    if (favoriteIds.includes(movie.id)) {
-      const res = await cancelVideoFavoriteService(movie.id);
+  // ============================================================
+  // 播单
+  // ============================================================
+
+  const openAddToList = (movie: MovieItem) => {
+    setListTarget(movie);
+    setAddToListOpen(true);
+  };
+
+  const addMovieToList = async (listId: number) => {
+    if (!listTarget) return false;
+    try {
+      const res = await addMovieToListService(listId, listTarget.id);
       if (res.code === 200) {
-        toast.success('已取消收藏');
-        setFavoriteIds((ids) => ids.filter((i) => i !== movie.id));
+        toast.success('已加入播单');
+        await loadLists();
+        return true;
       }
-    } else {
-      const res = await addVideoFavoriteService(movie.id);
-      if (res.code === 200) {
-        toast.success('收藏成功');
-        setFavoriteIds((ids) => [...ids, movie.id]);
-      }
+      return false;
+    } catch {
+      return false;
     }
   };
+
+  const openCreateList = () => {
+    setEditingList(null);
+    setListFormOpen(true);
+  };
+
+  const openEditList = (summary: MediaListSummary) => {
+    const target = videoLists.find((list) => Number(list.id) === summary.id);
+    if (!target) return;
+    setEditingList(target);
+    setListFormOpen(true);
+  };
+
+  const submitList = async (values: Record<string, unknown>) => {
+    const payload = {
+      name: String(values.name ?? '').trim(),
+      description: String(values.description ?? '').trim(),
+    };
+    if (!payload.name) {
+      toast.warning('播单名称不能为空');
+      return;
+    }
+    const res = editingList?.id
+      ? await updateVideoListService(editingList.id, payload)
+      : await createVideoListService(payload);
+    if (res.code === 200) {
+      toast.success(editingList ? '播单已更新' : '播单已创建');
+      setListFormOpen(false);
+      setEditingList(null);
+      loadLists();
+    }
+  };
+
+  const deleteList = async (summary: MediaListSummary) => {
+    const ok = await confirm({
+      title: '删除播单',
+      description: `确定删除「${summary.name}」吗？播单里的影片不会被删除。`,
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
+    const res = await deleteVideoListService(summary.id);
+    if (res.code === 200) {
+      toast.success('播单已删除');
+      loadLists();
+    }
+  };
+
+  const openListItems = async (summary: MediaListSummary) => {
+    const target = videoLists.find((list) => Number(list.id) === summary.id) ?? {
+      id: summary.id,
+      name: summary.name,
+      description: summary.description,
+    };
+    setActiveList(target);
+    setListItemsOpen(true);
+    setListItems([]);
+    setListItemsLoading(true);
+    try {
+      const res = await getVideoListItemsService(summary.id);
+      setListItems(((res.data as Movie[]) || []).map((m) => mapMovie(m as unknown as Record<string, unknown>)));
+    } catch {
+      setListItems([]);
+    } finally {
+      setListItemsLoading(false);
+    }
+  };
+
+  const removeMovieFromList = async (movieId: number) => {
+    if (!activeList?.id) return;
+    const res = await removeMovieFromListService(activeList.id, movieId);
+    if (res.code === 200) {
+      toast.success('已从播单移除');
+      setListItems((items) => items.filter((item) => item.id !== movieId));
+      loadLists();
+    }
+  };
+
+  const listSummaries = useMemo<MediaListSummary[]>(
+    () =>
+      videoLists
+        .filter((list) => list.id != null)
+        .map((list) => ({
+          id: Number(list.id),
+          name: list.name,
+          description: list.description,
+          count: Number(list.movieCount ?? 0),
+        })),
+    [videoLists],
+  );
+
+  const listMediaItems = useMemo<MediaListItem[]>(
+    () =>
+      listItems.map((movie) => ({
+        id: movie.id,
+        title: movie.name,
+        subtitle: movie.directedBy,
+        cover: movie.pic,
+      })),
+    [listItems],
+  );
 
   /** 分类 / 标签管理弹窗的列表数据 */
   const categoryItems: DimensionItem[] = useMemo(
@@ -411,10 +577,11 @@ export default function VideoViewPage() {
     return ok;
   };
 
-  const titleText = (() => {
-    if (view === 'recent' || view === 'online') return '';
-    if (view === 'favorite') return '我的收藏';
-    if (keyword) return `“${keyword}” 的搜索结果`;
+  /** 所有本地视图共用库布局：左上角标题 + 右上角排序 / 数量 */
+  const headerTitle = (() => {
+    if (view === 'recent') return '最近';
+    if (view === 'lists') return '我的播单';
+    if (view === 'all' && keyword) return `“${keyword}” 的搜索结果`;
     return '我的影视库';
   })();
 
@@ -498,7 +665,7 @@ export default function VideoViewPage() {
             size="small"
           >
             <ToggleButton value="recent">最近</ToggleButton>
-            <ToggleButton value="favorite">收藏</ToggleButton>
+            <ToggleButton value="lists">播单</ToggleButton>
             <ToggleButton value="all">库</ToggleButton>
             <ToggleButton value="online">在线</ToggleButton>
           </ToggleButtonGroup>
@@ -506,7 +673,7 @@ export default function VideoViewPage() {
         </Stack>
       </Card>
 
-      {titleText && (
+      {view !== 'online' && (
         <Stack
           direction="row"
           alignItems="center"
@@ -514,10 +681,10 @@ export default function VideoViewPage() {
           sx={{ mb: 2.5, flexWrap: 'wrap', rowGap: 1 }}
         >
           <Typography variant="h6" fontWeight={800}>
-            {titleText}
+            {headerTitle}
           </Typography>
           <Box sx={{ flex: 1, minWidth: 0 }} />
-          {view === 'all' && (
+          {view === 'all' ? (
             <FormControl size="small" sx={{ minWidth: 190 }}>
               <Select
                 value={sortKey}
@@ -535,6 +702,10 @@ export default function VideoViewPage() {
                 ))}
               </Select>
             </FormControl>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {view === 'recent' ? `${watchedMovies.length} 条最近记录` : `${listSummaries.length} 个播单`}
+            </Typography>
           )}
         </Stack>
       )}
@@ -545,7 +716,7 @@ export default function VideoViewPage() {
           dimension={onlineDimension}
           nonce={searchNonce}
           onImported={() => {
-            loadFavorites();
+            loadLists();
             reloadList();
           }}
         />
@@ -569,13 +740,25 @@ export default function VideoViewPage() {
               <MovieCard
                 key={m.id}
                 movie={m}
-                isFavorite={favoriteIds.includes(m.id)}
+                isFavorite={isInAnyList(m.id)}
                 onOpen={() => router.push(`/content/movie/${m.id}`)}
-                onToggleFavorite={() => toggleFavorite(m)}
+                onAddToList={() => openAddToList(m)}
               />
             ))}
           </Box>
         )
+      ) : view === 'lists' ? (
+        <MediaListPanel
+          lists={listSummaries}
+          loading={videoListsLoading}
+          icon={<VideoLibraryRoundedIcon sx={{ fontSize: 44 }} />}
+          unit="部"
+          newLabel="新建播单"
+          onCreate={openCreateList}
+          onOpen={openListItems}
+          onEdit={openEditList}
+          onDelete={deleteList}
+        />
       ) : loading ? (
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,1fr)', md: 'repeat(4,1fr)', lg: 'repeat(6,1fr)' }, gap: 2.5 }}>
           {Array.from({ length: 8 }).map((_, i) => (
@@ -587,7 +770,7 @@ export default function VideoViewPage() {
       ) : display.length === 0 ? (
         <EmptyState
           icon={<MovieRoundedIcon sx={{ fontSize: 64 }} />}
-          title={view === 'favorite' ? '暂无收藏影片' : '没有找到相关影片'}
+          title="没有找到相关影片"
           description="换个关键词或分类试试吧"
         />
       ) : (
@@ -596,15 +779,15 @@ export default function VideoViewPage() {
             <MovieCard
               key={m.id}
               movie={m}
-              isFavorite={favoriteIds.includes(m.id)}
+              isFavorite={isInAnyList(m.id)}
               onOpen={() => router.push(`/content/movie/${m.id}`)}
-              onToggleFavorite={() => toggleFavorite(m)}
+              onAddToList={() => openAddToList(m)}
             />
           ))}
         </Box>
       )}
 
-      {total > 0 && view !== 'recent' && view !== 'online' && (
+      {total > 0 && view !== 'recent' && view !== 'lists' && view !== 'online' && (
         <Stack direction="row" justifyContent="center" alignItems="center" spacing={2} sx={{ mt: 4 }}>
           <Button variant="outlined" startIcon={<ChevronLeftRoundedIcon />} disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
             上一页
@@ -623,6 +806,56 @@ export default function VideoViewPage() {
         </Stack>
       )}
 
+      {/* 播单新建 / 编辑 */}
+      <FormDialog
+        open={listFormOpen}
+        title={editingList ? '编辑播单' : '新建播单'}
+        fields={LIST_FIELDS}
+        initial={
+          editingList
+            ? {
+                name: editingList.name,
+                description: editingList.description ?? '',
+              }
+            : undefined
+        }
+        onClose={() => {
+          setListFormOpen(false);
+          setEditingList(null);
+        }}
+        onSubmit={submitList}
+      />
+
+      {/* 收藏图标 → 选择加入哪个播单 */}
+      <AddToListDialog
+        open={addToListOpen}
+        title="加入播单"
+        itemTitle={listTarget?.name}
+        lists={listSummaries}
+        unit="部"
+        icon={<VideoLibraryRoundedIcon />}
+        onAdd={addMovieToList}
+        onClose={() => {
+          setAddToListOpen(false);
+          setListTarget(null);
+        }}
+        onCreate={() => {
+          setAddToListOpen(false);
+          openCreateList();
+        }}
+      />
+
+      {/* 播单详情 */}
+      <ListItemsDialog
+        open={listItemsOpen}
+        title={activeList?.name || '播单'}
+        subtitle={activeList?.description}
+        items={listMediaItems}
+        loading={listItemsLoading}
+        emptyText="播单还是空的"
+        onRemove={(item) => removeMovieFromList(item.id)}
+        onClose={() => setListItemsOpen(false)}
+      />
     </Box>
   );
 }
@@ -632,12 +865,12 @@ function MovieCard({
   movie,
   isFavorite,
   onOpen,
-  onToggleFavorite,
+  onAddToList,
 }: {
   movie: MovieItem;
   isFavorite: boolean;
   onOpen: () => void;
-  onToggleFavorite: () => void;
+  onAddToList: () => void;
 }) {
   const { mm } = useTheme();
   return (
@@ -697,13 +930,13 @@ function MovieCard({
       </Box>
 
       {/* 收藏 */}
-      <Tooltip title={isFavorite ? '取消收藏' : '收藏'}>
+      <Tooltip title={isFavorite ? '已在播单中，点击加入其他播单' : '加入播单'}>
         <IconButton
           size="small"
-          aria-label={isFavorite ? '取消收藏' : '收藏'}
+          aria-label="加入播单"
           onClick={(e) => {
             e.stopPropagation();
-            onToggleFavorite();
+            onAddToList();
           }}
           sx={{
             position: 'absolute',

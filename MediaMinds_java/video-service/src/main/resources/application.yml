@@ -44,3 +44,5 @@ tmdb:
   backdrop-size: w780
   # 导入时是否把海报下载到 MinIO（false 则直接保存 TMDB 图片地址）
   import-download-image: true
+  # 第三方播放平台优先展示的地区（TMDB watch/providers locale）
+  watch-region: ${TMDB_WATCH_REGION:CN}

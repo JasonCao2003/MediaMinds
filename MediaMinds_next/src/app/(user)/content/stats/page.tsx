@@ -35,7 +35,7 @@ import {
   getSavedAnnualReportService,
   saveAnnualReportService,
 } from '@/api/activity';
-import { getFavoriteListService } from '@/api/book';
+import { getBookListsService, getBookListItemsService } from '@/api/book';
 import { getWatchHistoryService } from '@/api/video';
 import { getAllCollectionsService } from '@/api/music';
 import type { ActivityDay, ActivitySummary, AnnualReport } from '@/types';
@@ -500,14 +500,22 @@ function HabitStat({ label, value }: { label: string; value: string }) {
 
 // ────────────────────── 年度报告用的内容清单 ──────────────────────
 
-/** 收藏的图书标题 */
+/** 所有书单里的图书标题（去重），用于年度报告 */
 async function fetchBookTitles(): Promise<string[]> {
   try {
-    const res = await getFavoriteListService(1, 100);
-    const { rows } = normalizePage<Record<string, unknown>>(res);
-    return rows
-      .map((r) => String(r.bookName || r.title || r.name || '').trim())
-      .filter(Boolean);
+    const listsRes = await getBookListsService();
+    const lists = (listsRes.data as Array<{ id?: number }> | undefined) ?? [];
+    const titles = new Set<string>();
+    for (const list of lists) {
+      if (list.id == null) continue;
+      const itemsRes = await getBookListItemsService(list.id);
+      const books = (itemsRes.data as Array<Record<string, unknown>> | undefined) ?? [];
+      for (const book of books) {
+        const title = String(book.bookName || book.title || book.name || '').trim();
+        if (title) titles.add(title);
+      }
+    }
+    return Array.from(titles).slice(0, 100);
   } catch {
     return [];
   }

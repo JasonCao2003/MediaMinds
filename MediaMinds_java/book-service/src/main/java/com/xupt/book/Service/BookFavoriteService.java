@@ -15,6 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -53,14 +55,21 @@ public class BookFavoriteService {
                 return Result.success(new Page<>(page, size));
             }
             
-            // 查询书籍详细信息
-            Page<Book> bookPage = new Page<>(page, size);
-            LambdaQueryWrapper<Book> bookWrapper = new LambdaQueryWrapper<>();
-            bookWrapper.in(Book::getId, bookIds)
-                    .orderByDesc(Book::getCreateTime);
-            bookMapper.selectPage(bookPage, bookWrapper);
-            
-            return Result.success(bookPage);
+            // 查询书籍详细信息。
+            // 注意：bookIds 已经是当前页的收藏记录，不能再按 page/size 查一次，
+            // 否则第 2 页会因为偏移量再次生效而返回空列表。
+            List<Book> books = bookMapper.selectList(
+                    new LambdaQueryWrapper<Book>().in(Book::getId, bookIds));
+            Map<Integer, Book> bookById = books.stream()
+                    .collect(Collectors.toMap(Book::getId, b -> b, (a, b) -> a));
+            List<Book> sortedBooks = bookIds.stream()
+                    .map(bookById::get)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+
+            Page<Book> resultPage = new Page<>(page, size, favoritePage.getTotal());
+            resultPage.setRecords(sortedBooks);
+            return Result.success(resultPage);
         } catch (Exception e) {
             return Result.error(500, "查询收藏列表失败: " + e.getMessage());
         }

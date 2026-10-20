@@ -4,6 +4,7 @@ import { useState } from 'react';
 import {
   Box,
   Button,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -15,14 +16,15 @@ import {
   Typography,
 } from '@mui/material';
 import LibraryMusicRoundedIcon from '@mui/icons-material/LibraryMusicRounded';
+import FavoriteRoundedIcon from '@mui/icons-material/FavoriteRounded';
 import { toast } from '@/lib/notify';
 import { addListSongService } from '@/api/music';
 
 /**
  * 「加入歌单」弹窗。
  *
- * <p>只列出**自建歌单**——「我的收藏」是一个特殊歌单，收藏通过歌曲上的「收藏」按钮完成，
- * 不混进这里的列表，避免用户在这里误操作收藏。
+ * <p>把「我的收藏」也作为一个特殊歌单列在第一位，其余为自建歌单；
+ * 点击即加入，重复添加由后端 409 提示。
  */
 export default function AddToPlaylistDialog({
   open,
@@ -31,6 +33,7 @@ export default function AddToPlaylistDialog({
   onClose,
   onChanged,
   onCreatePlaylist,
+  onAddFavorite,
 }: {
   open: boolean;
   song: Record<string, unknown> | null;
@@ -38,8 +41,9 @@ export default function AddToPlaylistDialog({
   onClose: () => void;
   onChanged: () => void;
   onCreatePlaylist: () => void;
+  onAddFavorite?: () => Promise<boolean>;
 }) {
-  const [busy, setBusy] = useState<number | null>(null);
+  const [busy, setBusy] = useState<number | 'favorite' | null>(null);
   const songId = song?.id == null ? null : Number(song.id);
 
   const addToList = async (list: Record<string, unknown>) => {
@@ -60,6 +64,17 @@ export default function AddToPlaylistDialog({
     }
   };
 
+  const addFavorite = async () => {
+    if (!onAddFavorite || songId == null) return;
+    setBusy('favorite');
+    try {
+      const ok = await onAddFavorite();
+      if (ok) onClose();
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ fontWeight: 800, pt: 2.5 }}>加入歌单</DialogTitle>
@@ -68,12 +83,16 @@ export default function AddToPlaylistDialog({
           {String(song?.name ?? '')}
         </Typography>
 
-        {songLists.length === 0 ? (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', py: 1.5 }}>
-            还没有自建歌单，先新建一个吧。
-          </Typography>
-        ) : (
+        {onAddFavorite || songLists.length > 0 ? (
           <List sx={{ maxHeight: 360, overflowY: 'auto' }}>
+            {onAddFavorite && (
+              <ListItemButton onClick={addFavorite} disabled={busy != null || songId == null}>
+                <ListItemIcon sx={{ minWidth: 40 }}>
+                  {busy === 'favorite' ? <CircularProgress size={20} /> : <FavoriteRoundedIcon />}
+                </ListItemIcon>
+                <ListItemText primary="我的收藏" secondary="特殊歌单" />
+              </ListItemButton>
+            )}
             {songLists.map((list) => (
               <ListItemButton
                 key={String(list.id)}
@@ -90,6 +109,10 @@ export default function AddToPlaylistDialog({
               </ListItemButton>
             ))}
           </List>
+        ) : (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', py: 1.5 }}>
+            还没有自建歌单，先新建一个吧。
+          </Typography>
         )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2.5, gap: 1.5 }}>

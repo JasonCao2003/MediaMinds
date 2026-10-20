@@ -30,4 +30,6 @@ public class Movie {
     private Integer rateCount;
     /** 数据来源标记，如 TMDB */
     private String source;
+    /** TMDB 影片 ID；用于查询第三方播放平台（老数据可能为空） */
+    private Long tmdbId;
 } 

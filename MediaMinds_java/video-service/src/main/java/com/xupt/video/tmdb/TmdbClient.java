@@ -101,6 +101,11 @@ public class TmdbClient {
         return get("/movie/" + tmdbId, params);
     }
 
+    /** 影片在各地可用的观看平台（TMDB watch/providers） */
+    public JsonNode watchProviders(long tmdbId) {
+        return get("/movie/" + tmdbId + "/watch/providers", null);
+    }
+
     public JsonNode popular(int page) {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("page", String.valueOf(page));

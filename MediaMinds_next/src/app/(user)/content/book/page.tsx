@@ -6,6 +6,7 @@ import {
   Box,
   Button,
   Card,
+  Chip,
   CircularProgress,
   Dialog,
   DialogContent,
@@ -39,6 +40,7 @@ import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import LibraryBooksRoundedIcon from '@mui/icons-material/LibraryBooksRounded';
 import CategoryRoundedIcon from '@mui/icons-material/CategoryRounded';
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import SyncRoundedIcon from '@mui/icons-material/SyncRounded';
@@ -76,9 +78,15 @@ import {
   searchBookService,
   getAllTypesService,
   getAllChaptersService,
-  getFavoriteListService,
-  addFavoriteService,
-  deleteFavoriteByBookService,
+  getBookListsService,
+  createBookListService,
+  updateBookListService,
+  deleteBookListService,
+  getBookListItemsService,
+  addBookToListService,
+  removeBookFromListService,
+  getBookListMembershipService,
+  type BookList,
   addBookService,
   updateBookService,
   deleteBookService,
@@ -92,9 +100,12 @@ import {
 import FormDialog, { type FormField } from '@/components/manage/FormDialog';
 import DimensionDialog, { type DimensionItem } from '@/components/manage/DimensionDialog';
 import { useCrud } from '@/components/manage/useCrud';
+import MediaListPanel, { type MediaListSummary } from '@/components/lists/MediaListPanel';
+import AddToListDialog from '@/components/lists/AddToListDialog';
+import ListItemsDialog, { type MediaListItem } from '@/components/lists/ListItemsDialog';
 import type { Book, BookType, Chapter } from '@/types';
 
-type BookView = 'recent' | 'all' | 'favorite' | 'online';
+type BookView = 'recent' | 'lists' | 'all' | 'online';
 
 interface BookItem {
   id: number;
@@ -181,8 +192,8 @@ function bookToFormValues(book: BookItem): Record<string, unknown> {
   };
 }
 
-/** 「最近添加」「最近观看」各取 3 个（一行三个），不分页 */
-const RECENT_SIZE = 3;
+/** 「最近阅读」只取一页（12 条），不分页 */
+const RECENT_SIZE = 12;
 
 /** 书库排序：只保留添加顺序（默认最新在最上） */
 type BookSortKey = 'createTime-desc' | 'createTime-asc';
@@ -230,6 +241,12 @@ const stagingBookFields = (types: BookType[]): FormField[] => [
 /** 图书类型表单字段 */
 const TYPE_FIELDS: FormField[] = [{ name: 'typeName', label: '类型名', required: true, maxLength: 50 }];
 
+/** 书单表单字段 */
+const LIST_FIELDS: FormField[] = [
+  { name: 'name', label: '书单名', required: true, maxLength: 100 },
+  { name: 'description', label: '描述', maxLength: 500 },
+];
+
 /**
  * 章节表单字段。
  * `book_chapter.content_path` 是 NOT NULL，且后端没有正文上传端点，
@@ -248,8 +265,6 @@ export default function BookViewPage() {
   const confirm = useConfirm();
   const [refreshing, setRefreshing] = useState(false);
   const [books, setBooks] = useState<BookItem[]>([]);
-  const [favorites, setFavorites] = useState<BookItem[]>([]);
-  const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
   const [types, setTypes] = useState<BookType[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -268,6 +283,19 @@ export default function BookViewPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState<BookItem | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
+
+  // 书单
+  const [bookLists, setBookLists] = useState<BookList[]>([]);
+  const [listMembership, setListMembership] = useState<Record<string, number[]>>({});
+  const [bookListsLoading, setBookListsLoading] = useState(false);
+  const [addToListOpen, setAddToListOpen] = useState(false);
+  const [listTarget, setListTarget] = useState<BookItem | null>(null);
+  const [listFormOpen, setListFormOpen] = useState(false);
+  const [editingList, setEditingList] = useState<BookList | null>(null);
+  const [listItemsOpen, setListItemsOpen] = useState(false);
+  const [activeList, setActiveList] = useState<BookList | null>(null);
+  const [listItems, setListItems] = useState<BookItem[]>([]);
+  const [listItemsLoading, setListItemsLoading] = useState(false);
 
   // 管理相关弹窗
   const [bookFormOpen, setBookFormOpen] = useState(false);
@@ -323,15 +351,27 @@ export default function BookViewPage() {
     };
   }, []);
 
-  const loadFavorites = useCallback(async () => {
+  /** 书单列表 + 每本书所在书单（用于点亮收藏图标） */
+  const loadLists = useCallback(async () => {
+    setBookListsLoading(true);
     try {
-      const res = await getFavoriteListService(1, 500);
-      const { rows } = normalizePage<Record<string, unknown>>(res);
-      setFavoriteIds(rows.map((r) => Number(r.id)).filter(Boolean));
+      const [listsRes, membershipRes] = await Promise.all([
+        getBookListsService(),
+        getBookListMembershipService(),
+      ]);
+      setBookLists((listsRes.data as BookList[]) || []);
+      setListMembership(membershipRes.data || {});
     } catch {
       /* ignore */
+    } finally {
+      setBookListsLoading(false);
     }
   }, []);
+
+  const isInAnyList = useCallback(
+    (bookId: number) => (listMembership[String(bookId)]?.length ?? 0) > 0,
+    [listMembership],
+  );
 
   const loadBooks = useCallback(async () => {
     setLoading(true);
@@ -365,18 +405,6 @@ export default function BookViewPage() {
     }
   }, [mapBook]);
 
-  const loadFavoriteBooks = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await getFavoriteListService(page, PAGE_SIZE);
-      const { rows, total: t } = normalizePage<Record<string, unknown>>(res);
-      setFavorites(rows.map((r) => ({ ...mapBook(r), isFavorite: true })));
-      setTotal(t);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, mapBook]);
-
   const reloadTypes = useCallback(async () => {
     try {
       const res = await getAllTypesService();
@@ -398,15 +426,15 @@ export default function BookViewPage() {
   /** 保存后刷新当前视图的列表 */
   const reloadList = useCallback(() => {
     if (view === 'recent') setRecentWatched(getRecent('book'));
-    else if (view === 'favorite') loadFavoriteBooks();
+    else if (view === 'lists') loadLists();
     else if (view === 'all') loadBooks();
-  }, [view, loadFavoriteBooks, loadBooks]);
+  }, [view, loadLists, loadBooks]);
 
-  /** 上传 / 在线收藏成功后：收藏与当前视图都要刷新 */
+  /** 上传 / 在线收藏成功后：书单与当前视图都要刷新 */
   const refreshAfterImport = useCallback(() => {
-    loadFavorites();
+    loadLists();
     if (view !== 'online') reloadList();
-  }, [view, loadFavorites, reloadList]);
+  }, [view, loadLists, reloadList]);
 
   /** 切换元数据锁定（阶段 6） */
   const toggleMetadataLock = async (book: BookItem) => {
@@ -561,7 +589,7 @@ export default function BookViewPage() {
 
   useEffect(() => {
     reloadTypes();
-    loadFavorites();
+    loadLists();
     // 上传前校验用后端支持的格式，避免前端写死与后端漂移
     getSupportedBookFormatsService()
       .then((res) => {
@@ -572,12 +600,12 @@ export default function BookViewPage() {
       .catch(() => {
         /* 拿不到就沿用默认三格式 */
       });
-  }, [reloadTypes, loadFavorites]);
+  }, [reloadTypes, loadLists]);
 
   useEffect(() => {
     if (view === 'online') return; // 在线结果由 OnlineBooksPanel 自己拉取
-    if (view === 'favorite') {
-      loadFavoriteBooks();
+    if (view === 'lists') {
+      loadLists();
       return;
     }
     if (view === 'recent') {
@@ -586,7 +614,7 @@ export default function BookViewPage() {
       return;
     }
     loadBooks();
-  }, [view, loadBooks, loadRecentAdded, loadFavoriteBooks]);
+  }, [view, loadBooks, loadRecentAdded, loadLists]);
 
   /** 「最近观看」的本地快照 → 卡片数据（把最近时间放进 description 展示） */
   const watchedBooks = useMemo<BookItem[]>(
@@ -597,21 +625,21 @@ export default function BookViewPage() {
         author: r.subtitle || '未知作者',
         cover: r.cover,
         description: relativeTime(r.at),
-        isFavorite: favoriteIds.includes(Number(r.id)),
+        isFavorite: isInAnyList(Number(r.id)),
       })),
-    [recentWatched, favoriteIds],
+    [recentWatched, isInAnyList],
   );
 
   /** 「最近添加」的卡片数据 */
   const addedBooks = useMemo<BookItem[]>(
-    () => recentAdded.map((b) => ({ ...b, isFavorite: favoriteIds.includes(b.id) })),
-    [recentAdded, favoriteIds],
+    () => recentAdded.map((b) => ({ ...b, isFavorite: isInAnyList(b.id) })),
+    [recentAdded, isInAnyList],
   );
 
-  /** 普通网格（全部 / 收藏）的数据 */
+  /** 普通网格（全部）的数据 */
   const display = useMemo<BookItem[]>(
-    () => (view === 'favorite' ? favorites : books).map((b) => ({ ...b, isFavorite: favoriteIds.includes(b.id) })),
-    [view, books, favorites, favoriteIds],
+    () => books.map((b) => ({ ...b, isFavorite: isInAnyList(b.id) })),
+    [books, isInAnyList],
   );
 
   const typeName = (id?: number) => types.find((t) => t.id === id)?.typeName || '未分类';
@@ -701,23 +729,130 @@ export default function BookViewPage() {
     [types],
   );
 
-  const toggleFavorite = async (book: BookItem) => {
-    const isFav = favoriteIds.includes(book.id);
-    if (isFav) {
-      const res = await deleteFavoriteByBookService(book.id);
+  // ============================================================
+  // 书单
+  // ============================================================
+
+  const openAddToList = (book: BookItem) => {
+    setListTarget(book);
+    setAddToListOpen(true);
+  };
+
+  const addBookToList = async (listId: number) => {
+    if (!listTarget) return false;
+    try {
+      const res = await addBookToListService(listId, listTarget.id);
       if (res.code === 200) {
-        toast.success('取消收藏成功');
-        setFavoriteIds((ids) => ids.filter((i) => i !== book.id));
-        if (view === 'favorite') loadFavoriteBooks();
+        toast.success('已加入书单');
+        await loadLists();
+        return true;
       }
-    } else {
-      const res = await addFavoriteService({ bookId: book.id, chapterId: 0 });
-      if (res.code === 200) {
-        toast.success('收藏成功');
-        setFavoriteIds((ids) => [...ids, book.id]);
-      }
+      return false;
+    } catch {
+      return false;
     }
   };
+
+  const openCreateList = () => {
+    setEditingList(null);
+    setListFormOpen(true);
+  };
+
+  const openEditList = (summary: MediaListSummary) => {
+    const target = bookLists.find((list) => Number(list.id) === summary.id);
+    if (!target) return;
+    setEditingList(target);
+    setListFormOpen(true);
+  };
+
+  const submitList = async (values: Record<string, unknown>) => {
+    const payload = {
+      name: String(values.name ?? '').trim(),
+      description: String(values.description ?? '').trim(),
+    };
+    if (!payload.name) {
+      toast.warning('书单名称不能为空');
+      return;
+    }
+    const res = editingList?.id
+      ? await updateBookListService(editingList.id, payload)
+      : await createBookListService(payload);
+    if (res.code === 200) {
+      toast.success(editingList ? '书单已更新' : '书单已创建');
+      setListFormOpen(false);
+      setEditingList(null);
+      loadLists();
+    }
+  };
+
+  const deleteList = async (summary: MediaListSummary) => {
+    const ok = await confirm({
+      title: '删除书单',
+      description: `确定删除「${summary.name}」吗？书单里的书不会被删除。`,
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
+    const res = await deleteBookListService(summary.id);
+    if (res.code === 200) {
+      toast.success('书单已删除');
+      loadLists();
+    }
+  };
+
+  const openListItems = async (summary: MediaListSummary) => {
+    const target = bookLists.find((list) => Number(list.id) === summary.id) ?? {
+      id: summary.id,
+      name: summary.name,
+      description: summary.description,
+    };
+    setActiveList(target);
+    setListItemsOpen(true);
+    setListItems([]);
+    setListItemsLoading(true);
+    try {
+      const res = await getBookListItemsService(summary.id);
+      setListItems(((res.data as Book[]) || []).map((b) => mapBook(b as unknown as Record<string, unknown>)));
+    } catch {
+      setListItems([]);
+    } finally {
+      setListItemsLoading(false);
+    }
+  };
+
+  const removeBookFromList = async (bookId: number) => {
+    if (!activeList?.id) return;
+    const res = await removeBookFromListService(activeList.id, bookId);
+    if (res.code === 200) {
+      toast.success('已从书单移除');
+      setListItems((items) => items.filter((item) => item.id !== bookId));
+      loadLists();
+    }
+  };
+
+  const listSummaries = useMemo<MediaListSummary[]>(
+    () =>
+      bookLists
+        .filter((list) => list.id != null)
+        .map((list) => ({
+          id: Number(list.id),
+          name: list.name,
+          description: list.description,
+          count: Number(list.bookCount ?? 0),
+        })),
+    [bookLists],
+  );
+
+  const listMediaItems = useMemo<MediaListItem[]>(
+    () =>
+      listItems.map((book) => ({
+        id: book.id,
+        title: book.title,
+        subtitle: book.author,
+        cover: book.cover,
+      })),
+    [listItems],
+  );
 
   /**
    * 打开详情前先确认书还在库里。
@@ -1087,10 +1222,11 @@ export default function BookViewPage() {
     if (!keyword) loadBooks();
   };
 
-  const titleText = (() => {
-    if (view === 'recent' || view === 'online') return '';
-    if (view === 'favorite') return '我的收藏';
-    if (keyword) return `“${keyword}” 的搜索结果`;
+  /** 所有本地视图共用库布局：左上角标题 + 右上角排序 / 数量 */
+  const headerTitle = (() => {
+    if (view === 'recent') return '最近';
+    if (view === 'lists') return '我的书单';
+    if (view === 'all' && keyword) return `“${keyword}” 的搜索结果`;
     return '我的书库';
   })();
 
@@ -1126,6 +1262,18 @@ export default function BookViewPage() {
               },
             }}
           />
+          {/* 上传放在视图切换左边，保持三个页面工具栏顺序一致 */}
+          <Stack direction="row" spacing={1.5} sx={{ flexShrink: 0 }}>
+            <Button
+              variant="contained"
+              startIcon={<UploadFileRoundedIcon />}
+              onClick={pickBookFile}
+              disabled={stagingLoading}
+            >
+              上传
+            </Button>
+          </Stack>
+
           <ToggleButtonGroup
             exclusive
             value={view}
@@ -1138,25 +1286,14 @@ export default function BookViewPage() {
             size="small"
           >
             <ToggleButton value="recent">最近</ToggleButton>
-            <ToggleButton value="favorite">收藏</ToggleButton>
+            <ToggleButton value="lists">书单</ToggleButton>
             <ToggleButton value="all">库</ToggleButton>
             <ToggleButton value="online">在线</ToggleButton>
           </ToggleButtonGroup>
-
-          <Stack direction="row" spacing={1.5} sx={{ flexShrink: 0 }}>
-            <Button
-              variant="contained"
-              startIcon={<UploadFileRoundedIcon />}
-              onClick={pickBookFile}
-              disabled={stagingLoading}
-            >
-              上传图书文件
-            </Button>
-          </Stack>
         </Stack>
       </Card>
 
-      {titleText && (
+      {view !== 'online' && (
         <Stack
           direction="row"
           alignItems="center"
@@ -1164,10 +1301,10 @@ export default function BookViewPage() {
           sx={{ mb: 2.5, flexWrap: 'wrap', rowGap: 1 }}
         >
           <Typography variant="h6" fontWeight={800}>
-            {titleText}
+            {headerTitle}
           </Typography>
           <Box sx={{ flex: 1, minWidth: 0 }} />
-          {view === 'all' && (
+          {view === 'all' ? (
             <FormControl size="small" sx={{ minWidth: 160 }}>
               <Select
                 displayEmpty
@@ -1186,6 +1323,10 @@ export default function BookViewPage() {
                 ))}
               </Select>
             </FormControl>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {view === 'recent' ? `${watchedBooks.length} 条最近记录` : `${listSummaries.length} 个书单`}
+            </Typography>
           )}
         </Stack>
       )}
@@ -1208,13 +1349,25 @@ export default function BookViewPage() {
                 book={book}
                 onOpen={() => openDetail(book)}
                 onRead={() => startReading(book)}
-                onToggleFavorite={() => toggleFavorite(book)}
+                onAddToList={() => openAddToList(book)}
               />
             ))}
           </Box>
         )
+      ) : view === 'lists' ? (
+        <MediaListPanel
+          lists={listSummaries}
+          loading={bookListsLoading}
+          icon={<LibraryBooksRoundedIcon sx={{ fontSize: 44 }} />}
+          unit="本"
+          newLabel="新建书单"
+          onCreate={openCreateList}
+          onOpen={openListItems}
+          onEdit={openEditList}
+          onDelete={deleteList}
+        />
       ) : (
-        /* 本地书库（全部 / 收藏） */
+        /* 本地书库（全部） */
         <Box>
           <Box sx={{ minWidth: 0 }}>
             {loading ? (
@@ -1228,7 +1381,7 @@ export default function BookViewPage() {
             ) : display.length === 0 ? (
               <EmptyState
                 icon={<MenuBookRoundedIcon sx={{ fontSize: 64 }} />}
-                title={view === 'favorite' ? '暂无收藏图书' : '没有找到相关图书'}
+                title="没有找到相关图书"
                 description="换个关键词试试吧"
               />
             ) : (
@@ -1239,7 +1392,7 @@ export default function BookViewPage() {
                     book={book}
                     onOpen={() => openDetail(book)}
                     onRead={() => startReading(book)}
-                    onToggleFavorite={() => toggleFavorite(book)}
+                    onAddToList={() => openAddToList(book)}
                   />
                 ))}
               </Box>
@@ -1272,61 +1425,67 @@ export default function BookViewPage() {
         </Box>
       )}
 
-      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>{selected?.title}</DialogTitle>
-        <DialogContent sx={{ overflowX: 'hidden' }}>
+      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="lg" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, fontSize: { xs: '1.5rem', md: '2rem' } }}>
+          {selected?.title}
+        </DialogTitle>
+        <DialogContent sx={{ overflowX: 'hidden', pt: 2 }}>
           {selected && (
             <Box
               sx={{
                 display: 'grid',
-                gridTemplateColumns: { xs: '1fr', md: '240px minmax(0, 1fr)' },
-                gap: 3,
+                gridTemplateColumns: { xs: '1fr', md: '280px minmax(0, 1fr)' },
+                gap: { xs: 3, md: 4 },
                 minWidth: 0,
               }}
             >
-              <CoverImage
-                src={selected.cover}
-                alt={selected.title}
-                sx={{ width: '100%', borderRadius: 'var(--mm-radius)', display: 'block' }}
-              />
+              <Box sx={{ boxShadow: 'var(--mm-float)', alignSelf: 'start', bgcolor: 'var(--mm-sunken)' }}>
+                <CoverImage
+                  src={selected.cover}
+                  alt={selected.title}
+                  sx={{ width: '100%', aspectRatio: '2 / 3', objectFit: 'cover', display: 'block' }}
+                />
+              </Box>
               <Box sx={{ minWidth: 0 }}>
-                <Typography variant="body1" sx={{ mb: 1 }}>
-                  <strong>作者：</strong>
-                  {selected.author}
-                </Typography>
-                <Typography variant="body1" sx={{ mb: 1 }}>
-                  <strong>分类：</strong>
-                  {typeName(selected.typeId)}
-                </Typography>
-
-                <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', rowGap: 0.5, mb: 1.5 }}>
-                  {selected.publisher && (
-                    <Typography variant="body2" color="text.secondary">
-                      出版社：{selected.publisher}
-                    </Typography>
-                  )}
-                  {selected.publishedDate && (
-                    <Typography variant="body2" color="text.secondary">
-                      出版日期：{selected.publishedDate}
-                    </Typography>
-                  )}
-                  {selected.pageCount ? (
-                    <Typography variant="body2" color="text.secondary">
-                      {selected.pageCount} 页
-                    </Typography>
-                  ) : null}
-                  {(selected.isbn13 || selected.isbn10) && (
-                    <Typography variant="body2" color="text.secondary">
-                      ISBN：{selected.isbn13 || selected.isbn10}
-                    </Typography>
-                  )}
-                  {selected.seriesName && (
-                    <Typography variant="body2" color="text.secondary">
-                      丛书：{selected.seriesName}
-                      {selected.seriesNumber ? ` #${selected.seriesNumber}` : ''}
-                    </Typography>
+                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1, mb: 2 }}>
+                  <Chip label={`作者：${selected.author}`} />
+                  <Chip label={typeName(selected.typeId)} variant="outlined" />
+                  {selected.source && <Chip label={sourceLabel(selected.source)} variant="outlined" />}
+                  {selected.fileFormat && (
+                    <Chip label={selected.fileFormat.toUpperCase()} variant="outlined" />
                   )}
                 </Stack>
+
+                <Box sx={{ p: 1.75, mb: 2, bgcolor: 'var(--mm-sunken)', boxShadow: 'var(--mm-sunken-sm)' }}>
+                  <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', rowGap: 0.75 }}>
+                    {selected.publisher && (
+                      <Typography variant="body2" color="text.secondary">
+                        出版社：{selected.publisher}
+                      </Typography>
+                    )}
+                    {selected.publishedDate && (
+                      <Typography variant="body2" color="text.secondary">
+                        出版日期：{selected.publishedDate}
+                      </Typography>
+                    )}
+                    {selected.pageCount ? (
+                      <Typography variant="body2" color="text.secondary">
+                        {selected.pageCount} 页
+                      </Typography>
+                    ) : null}
+                    {(selected.isbn13 || selected.isbn10) && (
+                      <Typography variant="body2" color="text.secondary">
+                        ISBN：{selected.isbn13 || selected.isbn10}
+                      </Typography>
+                    )}
+                    {selected.seriesName && (
+                      <Typography variant="body2" color="text.secondary">
+                        丛书：{selected.seriesName}
+                        {selected.seriesNumber ? ` #${selected.seriesNumber}` : ''}
+                      </Typography>
+                    )}
+                  </Stack>
+                </Box>
 
                 {selected.hasFile && (
                   <Box
@@ -1391,10 +1550,13 @@ export default function BookViewPage() {
                   </Box>
                 )}
 
-                <Typography variant="body2" color="text.secondary" sx={{ my: 2, whiteSpace: 'pre-wrap' }}>
+                <Typography variant="h6" fontWeight={700} sx={{ mt: 2, mb: 1 }}>
+                  简介
+                </Typography>
+                <Typography variant="body1" color="text.secondary" sx={{ mb: 2, whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>
                   {selected.description || '暂无简介'}
                 </Typography>
-                <Stack direction="row" spacing={1.5} sx={{ flexWrap: 'wrap', rowGap: 1.5, alignItems: 'center' }}>
+                <Stack direction="row" spacing={1.5} sx={{ flexWrap: 'wrap', rowGap: 1.5, alignItems: 'flex-start' }}>
                   <Box>
                     <Button
                       variant="contained"
@@ -1417,11 +1579,11 @@ export default function BookViewPage() {
                   </Box>
                   <Button
                     variant="outlined"
-                    color={favoriteIds.includes(selected.id) ? 'warning' : 'inherit'}
-                    startIcon={favoriteIds.includes(selected.id) ? <StarRoundedIcon /> : <StarBorderRoundedIcon />}
-                    onClick={() => toggleFavorite(selected)}
+                    color={isInAnyList(selected.id) ? 'warning' : 'inherit'}
+                    startIcon={isInAnyList(selected.id) ? <StarRoundedIcon /> : <StarBorderRoundedIcon />}
+                    onClick={() => openAddToList(selected)}
                   >
-                    {favoriteIds.includes(selected.id) ? '取消收藏' : '收藏'}
+                    加入书单
                   </Button>
 
                   <Button
@@ -1632,6 +1794,57 @@ export default function BookViewPage() {
         onClose={closeChapterForm}
         onSubmit={submitChapter}
       />
+
+      {/* 书单新建 / 编辑 */}
+      <FormDialog
+        open={listFormOpen}
+        title={editingList ? '编辑书单' : '新建书单'}
+        fields={LIST_FIELDS}
+        initial={
+          editingList
+            ? {
+                name: editingList.name,
+                description: editingList.description ?? '',
+              }
+            : undefined
+        }
+        onClose={() => {
+          setListFormOpen(false);
+          setEditingList(null);
+        }}
+        onSubmit={submitList}
+      />
+
+      {/* 收藏图标 → 选择加入哪个书单 */}
+      <AddToListDialog
+        open={addToListOpen}
+        title="加入书单"
+        itemTitle={listTarget?.title}
+        lists={listSummaries}
+        unit="本"
+        icon={<LibraryBooksRoundedIcon />}
+        onAdd={addBookToList}
+        onClose={() => {
+          setAddToListOpen(false);
+          setListTarget(null);
+        }}
+        onCreate={() => {
+          setAddToListOpen(false);
+          openCreateList();
+        }}
+      />
+
+      {/* 书单详情 */}
+      <ListItemsDialog
+        open={listItemsOpen}
+        title={activeList?.name || '书单'}
+        subtitle={activeList?.description}
+        items={listMediaItems}
+        loading={listItemsLoading}
+        emptyText="书单还是空的"
+        onRemove={(item) => removeBookFromList(item.id)}
+        onClose={() => setListItemsOpen(false)}
+      />
     </Box>
   );
 }
@@ -1641,12 +1854,12 @@ function BookCard({
   book,
   onOpen,
   onRead,
-  onToggleFavorite,
+  onAddToList,
 }: {
   book: BookItem;
   onOpen: () => void;
   onRead: () => void;
-  onToggleFavorite: () => void;
+  onAddToList: () => void;
 }) {
   const { mm } = useTheme();
   return (
@@ -1725,13 +1938,13 @@ function BookCard({
             <MenuBookOutlinedIcon fontSize="small" />
           </IconButton>
         </Tooltip>
-        <Tooltip title={book.isFavorite ? '取消收藏' : '收藏'}>
+        <Tooltip title={book.isFavorite ? '已在书单中，点击加入其他书单' : '加入书单'}>
           <IconButton
             size="small"
-            aria-label={book.isFavorite ? '取消收藏' : '收藏'}
+            aria-label="加入书单"
             onClick={(e) => {
               e.stopPropagation();
-              onToggleFavorite();
+              onAddToList();
             }}
             sx={{
               bgcolor: 'var(--mm-bg)',
@@ -1786,17 +1999,15 @@ function RecentColumn({
 function BookTable({
   books,
   typeName,
-  favoriteIds,
   onOpen,
   onRead,
-  onToggleFavorite,
+  onAddToList,
 }: {
   books: BookItem[];
   typeName: (id?: number) => string;
-  favoriteIds: number[];
   onOpen: (book: BookItem) => void;
   onRead: (book: BookItem) => void;
-  onToggleFavorite: (book: BookItem) => void;
+  onAddToList: (book: BookItem) => void;
 }) {
   return (
     <Box sx={{ bgcolor: 'var(--mm-bg)', boxShadow: 'var(--mm-raised-sm)', overflow: 'hidden' }}>
@@ -1863,16 +2074,16 @@ function BookTable({
                   >
                     阅读
                   </Button>
-                  <Tooltip title={favoriteIds.includes(book.id) ? '取消收藏' : '收藏'}>
+                  <Tooltip title={book.isFavorite ? '已在书单中' : '加入书单'}>
                     <IconButton
                       size="small"
-                      aria-label={favoriteIds.includes(book.id) ? '取消收藏' : '收藏'}
+                      aria-label="加入书单"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onToggleFavorite(book);
+                        onAddToList(book);
                       }}
                     >
-                      {favoriteIds.includes(book.id) ? (
+                      {book.isFavorite ? (
                         <StarRoundedIcon fontSize="small" />
                       ) : (
                         <StarBorderRoundedIcon fontSize="small" />

@@ -1,6 +1,6 @@
 'use client';
 
-import { Children, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Avatar,
@@ -68,6 +68,7 @@ import {
   getAllSongListsService,
   getListSongBySongListIdService,
   getUserCollectionsService,
+  addCollectionService,
   addCommentService,
   getCommentsService,
   likeCommentService,
@@ -641,6 +642,9 @@ export default function MusicViewPage() {
 
   const currentIsPlaying = (id: unknown) => String(current?.id) === String(id) && playing;
 
+  /** 所有本地视图共用库布局：左上角标题 + 右上角排序 / 数量 */
+  const headerTitle = tab === 'recent' ? '最近' : tab === 'playlists' ? '我的歌单' : '我的音乐库';
+
   /** 点卡片封面：解析出可用地址后播放，并进入播放界面 */
   const handlePlay = async (song: Record<string, unknown>) => {
     const playable = await resolvePlayableSong(song);
@@ -764,6 +768,16 @@ export default function MusicViewPage() {
             </Select>
           )}
         </FormControl>
+
+          <Stack direction="row" spacing={1.5} sx={{ flexShrink: 0 }}>
+            <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={openCreateSong}>
+              上传
+            </Button>
+            <Button variant="outlined" startIcon={<LoginRoundedIcon />} onClick={() => setKugouLoginOpen(true)}>
+              登录
+            </Button>
+          </Stack>
+
           <ToggleButtonGroup
             exclusive
             value={tab}
@@ -782,72 +796,16 @@ export default function MusicViewPage() {
             <ToggleButton value="songs">库</ToggleButton>
             <ToggleButton value="kugou">在线</ToggleButton>
           </ToggleButtonGroup>
-
-          <Stack direction="row" spacing={1.5} sx={{ flexShrink: 0 }}>
-            <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={openCreateSong}>
-              新建歌曲
-            </Button>
-            <Button variant="outlined" startIcon={<LoginRoundedIcon />} onClick={() => setKugouLoginOpen(true)}>
-              酷狗登录
-            </Button>
-          </Stack>
         </Stack>
       </Card>
 
-      {tab === 'kugou' ? (
-        <KugouPanel
-          keyword={keyword}
-          dimension={onlineDimension}
-          nonce={searchNonce}
-          onSearchByName={handleSearchByName}
-          onImported={() => {
-            fetchSingers();
-            fetchSongs();
-            fetchCollections();
-          }}
-          onAddToPlaylist={(song) => setAddDialog({ open: true, song })}
-        />
-      ) : tab === 'recent' ? (
-        /* 「最近」只看最近播放 */
-        <RecentColumn title="最近播放" emptyText="暂无播放记录" icon={<HeadphonesRoundedIcon />}>
-          {watchedSongs.map((s) => (
-            <SongRow
-              key={String(s.id)}
-              song={s}
-              meta={s.recentAt as string}
-              onAddToPlaylist={() => setAddDialog({ open: true, song: s })}
-              onRemove={() => removeFromRecent(s)}
-              onPlay={() => handlePlay(s)}
-              onQueue={() => {
-                addToPlaylist(toTrack(s));
-                toast.success('已加入播放列表');
-              }}
-            />
-          ))}
-        </RecentColumn>
-      ) : loading ? (
-        <AutoGrid minWidth={240}>
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Card key={i} sx={{ borderRadius: 'var(--mm-radius-lg)', overflow: 'hidden' }}>
-              <Skeleton variant="rectangular" height={140} sx={{ borderRadius: 'var(--mm-radius-lg) var(--mm-radius-lg) 0 0' }} />
-              <CardContent>
-                <Skeleton variant="text" />
-              </CardContent>
-            </Card>
-          ))}
-        </AutoGrid>
-      ) : tab === 'songs' ? (
-        <>
-          <Stack
-            direction="row"
-            alignItems="center"
-            spacing={1.5}
-            sx={{ mb: 2.5, flexWrap: 'wrap', rowGap: 1 }}
-          >
-            <Typography variant="h6" fontWeight={800}>
-              我的音乐库
-            </Typography>
-            <Box sx={{ flex: 1, minWidth: 0 }} />
+      {tab !== 'kugou' && (
+        <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2.5, flexWrap: 'wrap', rowGap: 1 }}>
+          <Typography variant="h6" fontWeight={800}>
+            {headerTitle}
+          </Typography>
+          <Box sx={{ flex: 1, minWidth: 0 }} />
+          {tab === 'songs' ? (
             <FormControl size="small" sx={{ minWidth: 190 }}>
               <Select
                 value={sortKey}
@@ -866,8 +824,64 @@ export default function MusicViewPage() {
                 ))}
               </Select>
             </FormControl>
-          </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {tab === 'recent'
+                ? `${watchedSongs.length} 条最近记录`
+                : `${songLists.length + 1} 个歌单`}
+            </Typography>
+          )}
+        </Stack>
+      )}
 
+      {tab === 'kugou' ? (
+        <KugouPanel
+          keyword={keyword}
+          dimension={onlineDimension}
+          nonce={searchNonce}
+          onSearchByName={handleSearchByName}
+          onImported={() => {
+            fetchSingers();
+            fetchSongs();
+            fetchCollections();
+          }}
+          onAddToPlaylist={(song) => setAddDialog({ open: true, song })}
+        />
+      ) : tab === 'recent' ? (
+        /* 「最近」只看最近播放，卡片布局与「库」一致，且不分页 */
+        watchedSongs.length === 0 ? (
+          <EmptyState icon={<HeadphonesRoundedIcon sx={{ fontSize: 64 }} />} title="暂无播放记录" />
+        ) : (
+          <AutoGrid minWidth={300}>
+            {watchedSongs.map((s) => (
+              <SongRow
+                key={String(s.id)}
+                song={s}
+                meta={s.recentAt as string}
+                onAddToPlaylist={() => setAddDialog({ open: true, song: s })}
+                onRemove={() => removeFromRecent(s)}
+                onPlay={() => handlePlay(s)}
+                onQueue={() => {
+                  addToPlaylist(toTrack(s));
+                  toast.success('已加入播放列表');
+                }}
+              />
+            ))}
+          </AutoGrid>
+        )
+      ) : loading ? (
+        <AutoGrid minWidth={240}>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Card key={i} sx={{ borderRadius: 'var(--mm-radius-lg)', overflow: 'hidden' }}>
+              <Skeleton variant="rectangular" height={140} sx={{ borderRadius: 'var(--mm-radius-lg) var(--mm-radius-lg) 0 0' }} />
+              <CardContent>
+                <Skeleton variant="text" />
+              </CardContent>
+            </Card>
+          ))}
+        </AutoGrid>
+      ) : tab === 'songs' ? (
+        <>
           {songs.length === 0 ? (
             <EmptyState icon={<HeadphonesRoundedIcon sx={{ fontSize: 64 }} />} title="暂无歌曲" />
           ) : (
@@ -1048,6 +1062,17 @@ export default function MusicViewPage() {
           setAddDialog({ open: false, song: null });
           openCreatePlaylist();
         }}
+        onAddFavorite={async () => {
+          const songId = Number(addDialog.song?.id);
+          if (!songId) return false;
+          const res = await addCollectionService('0', songId);
+          if (res.code === 200) {
+            toast.success('已加入「我的收藏」');
+            fetchCollections();
+            return true;
+          }
+          return false;
+        }}
       />
 
       {/* 歌单详情：查看歌曲 / 从歌单移除 */}
@@ -1153,34 +1178,5 @@ function SongRow({
         </Tooltip>
       </Stack>
     </Card>
-  );
-}
-
-/** 「最近」里的一个分区：小标题 + 两列卡片网格 */
-function RecentColumn({
-  title,
-  emptyText,
-  icon,
-  children,
-}: {
-  title: string;
-  emptyText: string;
-  icon: ReactNode;
-  children: ReactNode;
-}) {
-  const count = Children.count(children);
-  return (
-    <Box sx={{ minWidth: 0 }}>
-      <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>
-        {title}
-      </Typography>
-      {count === 0 ? (
-        <EmptyState icon={icon} title={emptyText} minHeight={180} />
-      ) : (
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 2 }}>
-          {children}
-        </Box>
-      )}
-    </Box>
   );
 }

@@ -79,6 +79,14 @@ public class TmdbController {
         return Result.success(tmdbService.discoverByPerson(page, personId, role));
     }
 
+    @Operation(summary = "第三方播放平台",
+            description = "按本地影片 ID 查询 TMDB watch/providers；没有本地视频时用于展示第三方播放源")
+    @GetMapping("/watch-providers")
+    public Result<?> watchProviders(
+            @Parameter(description = "本地影片 ID", required = true) @RequestParam Long movieId) {
+        return Result.success(tmdbService.watchProviders(movieId));
+    }
+
     @Operation(summary = "影片详情", description = "获取 TMDB 影片详情（含演职员、关键词、图片）")
     @GetMapping("/{tmdbId}")
     public Result<?> detail(@Parameter(description = "TMDB 影片 ID") @PathVariable long tmdbId) {

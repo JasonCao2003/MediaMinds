@@ -162,7 +162,9 @@ CREATE TABLE `movie` (
                          `video` varchar(512) DEFAULT NULL,
                          `rate_count` int DEFAULT NULL,
                          `source` varchar(32) DEFAULT NULL,
-                         PRIMARY KEY (`id`)
+                         `tmdb_id` bigint DEFAULT NULL COMMENT 'TMDB 影片 ID（第三方播放平台查询用）',
+                         PRIMARY KEY (`id`),
+                         KEY `idx_movie_tmdb_id` (`tmdb_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb3;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -292,6 +294,45 @@ LOCK TABLES `user_video_interaction` WRITE;
 INSERT INTO `user_video_interaction` VALUES (1,'1',1,135,0.95,'2020-11-01 14:30:00',2),(2,'1',6,90,0.95,'2020-11-02 16:45:00',3),(3,'1',14,100,0.81,'2020-11-03 19:20:00',1),(4,'2',14,123,1.00,'2020-11-04 15:10:00',2),(5,'2',6,95,1.00,'2020-11-05 11:25:00',2),(6,'3',1,142,1.00,'2020-11-06 20:15:00',3),(7,'3',5,124,1.00,'2020-11-07 18:30:00',1),(8,'3',6,95,1.00,'2020-11-08 21:40:00',2),(9,'4',10,120,0.82,'2020-11-09 13:15:00',1),(10,'4',16,140,0.83,'2020-11-10 14:50:00',1),(11,'5',14,123,1.00,'2020-11-11 17:25:00',2),(12,'5',8,80,0.73,'2020-11-12 19:30:00',1),(13,'2',1,1747020706,23.00,'2025-05-12 11:31:47',5),(14,'2',12,1747015407,0.00,'2025-05-12 10:03:27',1);
 /*!40000 ALTER TABLE `user_video_interaction` ENABLE KEYS */;
 UNLOCK TABLES;
+--
+-- 播单：原收藏迁移为「我的收藏」播单；一部影片可加入多个播单
+--
+DROP TABLE IF EXISTS `video_list_item`;
+DROP TABLE IF EXISTS `video_list`;
+CREATE TABLE `video_list` (
+                               `id` bigint NOT NULL AUTO_INCREMENT,
+                               `user_id` varchar(20) NOT NULL,
+                               `name` varchar(100) NOT NULL,
+                               `description` varchar(500) DEFAULT NULL,
+                               `create_time` datetime NOT NULL,
+                               `update_time` datetime NOT NULL,
+                               PRIMARY KEY (`id`),
+                               UNIQUE KEY `uk_video_list_user_name` (`user_id`,`name`),
+                               KEY `idx_video_list_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `video_list_item` (
+                                   `id` bigint NOT NULL AUTO_INCREMENT,
+                                   `list_id` bigint NOT NULL,
+                                   `movie_id` bigint NOT NULL,
+                                   `create_time` datetime NOT NULL,
+                                   PRIMARY KEY (`id`),
+                                   UNIQUE KEY `uk_video_list_movie` (`list_id`,`movie_id`),
+                                   KEY `idx_video_list_item_movie` (`movie_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 保留旧收藏：迁移成「我的收藏」播单
+INSERT IGNORE INTO `video_list` (`user_id`, `name`, `description`, `create_time`, `update_time`)
+SELECT `user_id`, '我的收藏', '由原收藏迁移', NOW(), NOW()
+FROM `favorite`
+GROUP BY `user_id`;
+
+INSERT IGNORE INTO `video_list_item` (`list_id`, `movie_id`, `create_time`)
+SELECT l.`id`, f.`movie_id`, COALESCE(MIN(f.`create_time`), NOW())
+FROM `favorite` f
+JOIN `video_list` l ON l.`user_id` = f.`user_id` AND l.`name` = '我的收藏'
+GROUP BY l.`id`, f.`movie_id`;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

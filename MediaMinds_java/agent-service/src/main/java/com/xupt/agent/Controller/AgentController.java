@@ -6,8 +6,10 @@ import com.xupt.agent.DTO.AgentImportRequest;
 import com.xupt.agent.DTO.AgentQueryRequest;
 import com.xupt.agent.DTO.AnnualReportRequest;
 import com.xupt.agent.DTO.Result;
+import com.xupt.agent.DTO.TextAnalysisRequest;
 import com.xupt.agent.Service.AgentService;
 import com.xupt.agent.Service.AnnualReportService;
+import com.xupt.agent.Service.TextAnalysisService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,13 +35,16 @@ public class AgentController {
 
     private final AgentService agentService;
     private final AnnualReportService annualReportService;
+    private final TextAnalysisService textAnalysisService;
     private final AgentLlmProperties llmProperties;
 
     public AgentController(AgentService agentService,
                            AnnualReportService annualReportService,
+                           TextAnalysisService textAnalysisService,
                            AgentLlmProperties llmProperties) {
         this.agentService = agentService;
         this.annualReportService = annualReportService;
+        this.textAnalysisService = textAnalysisService;
         this.llmProperties = llmProperties;
     }
 
@@ -96,6 +101,16 @@ public class AgentController {
             return Result.error(400, "缺少报告数据");
         }
         return Result.success(annualReportService.generate(request));
+    }
+
+    @Operation(summary = "歌词情感 / 阅读段落分析",
+            description = "kind=lyric 分析歌词情感；kind=passage 分析选中的小说段落。未配置大模型时回退规则式分析")
+    @PostMapping("/analyze")
+    public Result<?> analyze(@RequestBody TextAnalysisRequest request) {
+        if (request == null || isBlank(request.getText())) {
+            return Result.error(400, "请先选择要分析的文本");
+        }
+        return Result.success(textAnalysisService.analyze(request));
     }
 
     @Operation(summary = "Agent 运行状态", description = "查看当前是否启用了大模型以及模型信息")

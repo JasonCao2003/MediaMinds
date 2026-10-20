@@ -16,13 +16,19 @@ import {
   Typography,
 } from '@mui/material';
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
+import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import PauseRoundedIcon from '@mui/icons-material/PauseRounded';
 import FullscreenRoundedIcon from '@mui/icons-material/FullscreenRounded';
 import FullscreenExitRoundedIcon from '@mui/icons-material/FullscreenExitRounded';
 import VolumeUpRoundedIcon from '@mui/icons-material/VolumeUpRounded';
 import VolumeOffRoundedIcon from '@mui/icons-material/VolumeOffRounded';
-import { getMovieByIdService, updateWatchRecordService } from '@/api/video';
+import {
+  getMovieByIdService,
+  getMovieWatchProvidersService,
+  updateWatchRecordService,
+  type MovieWatchProviders,
+} from '@/api/video';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { pushRecent } from '@/lib/recent';
 import { areaLabel, languageLabel } from '@/lib/format';
@@ -53,6 +59,11 @@ export default function MoviePlayerPage() {
   const [fullscreen, setFullscreen] = useState(false);
   /** 新版本把观看进度存成 0-1 的比例，等元数据加载后再换算成秒定位 */
   const [resumeRatio, setResumeRatio] = useState(0);
+  /** 没有本地视频源时，展示 TMDB 的第三方播放平台 */
+  const [watchSources, setWatchSources] = useState<MovieWatchProviders | null>(null);
+  const [sourcesLoading, setSourcesLoading] = useState(false);
+  const markedViewedRef = useRef(false);
+  const src = movie?.videoUrl || (movie as { url?: string })?.url || movie?.video || '';
 
   useEffect(() => {
     if (!id) return;
@@ -83,13 +94,15 @@ export default function MoviePlayerPage() {
   };
 
   useEffect(() => {
+    // 没有本地视频时不跑进度定时器（进入页面时已写一条「最近观看」）
+    if (!src) return;
     const t = setInterval(saveRecord, 15000);
     return () => {
       clearInterval(t);
       saveRecord();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, src]);
 
   useEffect(() => {
     const onFs = () => setFullscreen(Boolean(document.fullscreenElement));
@@ -129,7 +142,46 @@ export default function MoviePlayerPage() {
     else document.exitFullscreen?.();
   };
 
-  const src = movie?.videoUrl || (movie as { url?: string })?.url || '';
+  useEffect(() => {
+    markedViewedRef.current = false;
+  }, [id]);
+
+  // 没有本地视频也算「看过」：点「播放 / 查看播放源」进入本页就写入最近记录
+  useEffect(() => {
+    if (!id || !movie || src || markedViewedRef.current) return;
+    markedViewedRef.current = true;
+    pushRecent('video', {
+      id,
+      title: movie.name || movie.movieName || '未命名',
+      subtitle: movie.directedBy || movie.director,
+      cover: movie.pic || movie.picture || movie.cover,
+    });
+    updateWatchRecordService(id, 0, 0).catch(() => undefined);
+  }, [id, movie, src]);
+
+  // 没有本地视频时向 TMDB 查询第三方播放平台；有本地视频就不发这个请求
+  useEffect(() => {
+    if (!id || !movie || src) {
+      setWatchSources(null);
+      return;
+    }
+    let cancelled = false;
+    setWatchSources(null);
+    setSourcesLoading(true);
+    getMovieWatchProvidersService(id)
+      .then((res) => {
+        if (!cancelled && res.code === 200) setWatchSources(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setWatchSources(null);
+      })
+      .finally(() => {
+        if (!cancelled) setSourcesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, movie, src]);
 
   return (
     <Box>
@@ -141,6 +193,8 @@ export default function MoviePlayerPage() {
       <Box
         ref={containerRef}
         sx={{
+          // 没有本地视频时直接展示下方第三方播放源，不留下一个空的播放器
+          display: src ? 'block' : 'none',
           position: 'relative',
           width: '100%',
           bgcolor: 'var(--mm-bg)',
@@ -155,8 +209,15 @@ export default function MoviePlayerPage() {
           src={src}
           poster={movie?.pic || movie?.picture || movie?.cover}
           onClick={togglePlay}
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
+          onPlay={() => {
+            setPlaying(true);
+            // 立即落一条观看记录：只靠 15 秒定时器的话，短暂观看后返回列表会漏记
+            saveRecord();
+          }}
+          onPause={() => {
+            setPlaying(false);
+            saveRecord();
+          }}
           onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)}
           onLoadedMetadata={(e) => {
             setDuration(e.currentTarget.duration);
@@ -168,7 +229,10 @@ export default function MoviePlayerPage() {
               setResumeRatio(0);
             }
           }}
-          onEnded={() => setPlaying(false)}
+          onEnded={() => {
+            setPlaying(false);
+            saveRecord();
+          }}
           sx={{
             width: '100%',
             aspectRatio: '16 / 9',
@@ -181,6 +245,7 @@ export default function MoviePlayerPage() {
         {/* 控制条：压在视频上的浮层 */}
         <Box
           sx={{
+            display: src ? 'block' : 'none',
             position: 'absolute',
             left: { xs: 10, md: 14 },
             right: { xs: 10, md: 14 },
@@ -249,11 +314,104 @@ export default function MoviePlayerPage() {
           >
             <Stack alignItems="center" spacing={1}>
               <PlayArrowRoundedIcon sx={{ fontSize: 64 }} />
-              <Typography>该影片暂无可播放的视频源</Typography>
+              <Typography>该影片没有本地视频源</Typography>
+              <Typography variant="caption" color="text.secondary">
+                可在下方选择第三方播放平台
+              </Typography>
             </Stack>
           </Box>
         )}
       </Box>
+
+      {/* 没有本地视频时，展示 TMDB 的第三方播放平台 */}
+      {!src && !loading && (
+        <Card sx={{ mt: 3, borderRadius: 'var(--mm-radius-xl)' }}>
+          <CardContent sx={{ p: { xs: 2.5, md: 3.5 }, '&:last-child': { pb: { xs: 2.5, md: 3.5 } } }}>
+            <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1.5, flexWrap: 'wrap', rowGap: 0.5 }}>
+              <Typography variant="h6" fontWeight={700}>
+                第三方播放源
+              </Typography>
+              {watchSources?.region && (
+                <Typography variant="caption" color="text.secondary">
+                  TMDB · {watchSources.region}
+                </Typography>
+              )}
+            </Stack>
+
+            {sourcesLoading ? (
+              <Typography variant="body2" color="text.secondary">
+                正在从 TMDB 查询播放平台…
+              </Typography>
+            ) : watchSources?.providers?.length ? (
+              <>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  该影片没有本地视频，以下平台信息来自 TMDB。
+                </Typography>
+                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+                  {watchSources.providers.map((provider) => (
+                    <Button
+                      key={`${provider.type}-${provider.id}`}
+                      variant="outlined"
+                      startIcon={
+                        provider.logo ? (
+                          <Box
+                            component="img"
+                            src={provider.logo}
+                            alt=""
+                            sx={{ width: 22, height: 22, objectFit: 'contain', display: 'block' }}
+                          />
+                        ) : undefined
+                      }
+                      onClick={() =>
+                        watchSources.link &&
+                        window.open(watchSources.link, '_blank', 'noopener,noreferrer')
+                      }
+                    >
+                      {provider.name}
+                      <Typography component="span" variant="caption" sx={{ ml: 0.75, opacity: 0.7 }}>
+                        {provider.typeLabel}
+                      </Typography>
+                    </Button>
+                  ))}
+                </Stack>
+                {watchSources.link && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    endIcon={<OpenInNewRoundedIcon />}
+                    sx={{ mt: 2 }}
+                    onClick={() =>
+                      watchSources.link &&
+                      window.open(watchSources.link, '_blank', 'noopener,noreferrer')
+                    }
+                  >
+                    在 TMDB 查看全部播放源
+                  </Button>
+                )}
+              </>
+            ) : (
+              <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {watchSources?.note || 'TMDB 暂未返回该影片的第三方播放平台。'}
+                </Typography>
+                {watchSources?.link && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    endIcon={<OpenInNewRoundedIcon />}
+                    onClick={() =>
+                      watchSources.link &&
+                      window.open(watchSources.link, '_blank', 'noopener,noreferrer')
+                    }
+                  >
+                    在 TMDB 查看
+                  </Button>
+                )}
+              </Stack>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* 影片信息 */}
       <Card sx={{ mt: 3, borderRadius: 'var(--mm-radius-xl)' }}>

@@ -12,7 +12,7 @@ import {
   useTheme,
 } from '@mui/material';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
-import StarBorderRoundedIcon from '@mui/icons-material/StarBorderRounded';
+import LibraryAddRoundedIcon from '@mui/icons-material/LibraryAddRounded';
 import MovieRoundedIcon from '@mui/icons-material/MovieRounded';
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import EmptyState from '@/components/common/EmptyState';
@@ -23,7 +23,6 @@ import {
   searchTmdbPersonService,
   getTmdbPersonMoviesService,
   importTmdbMovieService,
-  addVideoFavoriteService,
   type TmdbDimension,
 } from '@/api/video';
 
@@ -244,21 +243,11 @@ export default function TmdbPanel({
     if (!movie.tmdbId) return;
     const res = await importTmdbMovieService(movie.tmdbId);
     if (res.code === 200) {
-      // 收藏 = 入库：先写入影视库，再收藏；取消收藏不会把影片移出库
-      const movieId = (res.data as unknown as { movie?: { id?: number } } | undefined)?.movie?.id;
-      let favorited = false;
-      if (movieId) {
-        try {
-          const fav = await addVideoFavoriteService(movieId);
-          favorited = fav.code === 200;
-        } catch {
-          /* 已收藏或收藏失败都不影响入库 */
-        }
-      }
-      toast.success(favorited ? '已收藏并加入影视库' : '已加入影视库');
+      // 只负责入库；加入哪个播单由影视库卡片上的收藏图标选择
+      toast.success('已加入影视库');
       onImported?.();
     } else {
-      toast.error((res as { message?: string }).message || '收藏失败');
+      toast.error((res as { message?: string }).message || '入库失败');
     }
   };
 
@@ -352,10 +341,10 @@ export default function TmdbPanel({
                 fullWidth
                 size="small"
                 variant="contained"
-                startIcon={<StarBorderRoundedIcon />}
+                startIcon={<LibraryAddRoundedIcon />}
                 onClick={() => importMovie(movie)}
               >
-                收藏
+                入库
               </Button>
             </CardContent>
           </Card>

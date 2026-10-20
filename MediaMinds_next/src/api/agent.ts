@@ -89,3 +89,32 @@ export const agentStatusService = () => request.get<ApiResult<AgentStatus>>('/v1
 
 export const agentImportService = (items: AgentCandidate[]) =>
   request.post<ApiResult<AgentImportResult>>('/v1/agent/import', { items });
+
+// =============== 歌词情感 / 阅读段落分析 ===============
+
+export type TextAnalysisKind = 'lyric' | 'passage';
+
+export interface TextAnalysisResult {
+  kind?: TextAnalysisKind | string;
+  /** langchain4j（大模型）| rule（规则兜底） */
+  engine: string;
+  model?: string;
+  /** 歌词情感：正面 / 负面 / 中性 / 复杂 */
+  sentiment?: string;
+  summary?: string;
+  analysis?: string;
+  rawText?: string;
+  /** 降级原因 */
+  error?: string;
+}
+
+/** 歌词情感 / 阅读选段分析；大模型较慢，超时放宽到 2 分钟 */
+export const analyzeTextService = (data: {
+  kind: TextAnalysisKind;
+  title?: string;
+  context?: string;
+  text: string;
+}) =>
+  request.post<ApiResult<TextAnalysisResult>>('/v1/agent/analyze', data, {
+    timeout: 120000,
+  });

@@ -152,6 +152,45 @@ LOCK TABLES `book_type` WRITE;
 INSERT INTO `book_type` VALUES (1,'教育教材','2023-02-03 14:41:27','2023-04-07 11:10:52'),(2,'科幻小说','2023-02-03 14:41:31','2023-04-07 11:10:58'),(3,'理财知识','2023-02-03 14:41:39','2023-04-07 11:12:41'),(4,'人物传记','2023-04-07 11:07:08','2023-04-07 11:13:44'),(5,'人文社科','2023-04-07 11:07:23','2023-04-07 11:13:57'),(6,'科普读物','2023-04-07 11:07:33','2023-04-07 11:14:08'),(7,'居家生活','2023-04-07 11:08:40','2023-04-07 11:14:23'),(8,'文艺作品','2023-04-07 11:09:29','2023-04-07 11:14:32');
 /*!40000 ALTER TABLE `book_type` ENABLE KEYS */;
 UNLOCK TABLES;
+--
+-- 书单：原收藏迁移为「我的收藏」书单；一本书可加入多个书单
+--
+DROP TABLE IF EXISTS `book_list_item`;
+DROP TABLE IF EXISTS `book_list`;
+CREATE TABLE `book_list` (
+                              `id` bigint NOT NULL AUTO_INCREMENT,
+                              `user_id` varchar(20) NOT NULL,
+                              `name` varchar(100) NOT NULL,
+                              `description` varchar(500) DEFAULT NULL,
+                              `create_time` datetime NOT NULL,
+                              `update_time` datetime NOT NULL,
+                              PRIMARY KEY (`id`),
+                              UNIQUE KEY `uk_book_list_user_name` (`user_id`,`name`),
+                              KEY `idx_book_list_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `book_list_item` (
+                                   `id` bigint NOT NULL AUTO_INCREMENT,
+                                   `list_id` bigint NOT NULL,
+                                   `book_id` int NOT NULL,
+                                   `create_time` datetime NOT NULL,
+                                   PRIMARY KEY (`id`),
+                                   UNIQUE KEY `uk_book_list_book` (`list_id`,`book_id`),
+                                   KEY `idx_book_list_item_book` (`book_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 保留旧收藏：迁移成「我的收藏」书单
+INSERT IGNORE INTO `book_list` (`user_id`, `name`, `description`, `create_time`, `update_time`)
+SELECT `user_id`, '我的收藏', '由原收藏迁移', NOW(), NOW()
+FROM `book_favorite`
+GROUP BY `user_id`;
+
+INSERT IGNORE INTO `book_list_item` (`list_id`, `book_id`, `create_time`)
+SELECT l.`id`, f.`book_id`, COALESCE(MIN(f.`create_time`), NOW())
+FROM `book_favorite` f
+JOIN `book_list` l ON l.`user_id` = f.`user_id` AND l.`name` = '我的收藏'
+GROUP BY l.`id`, f.`book_id`;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

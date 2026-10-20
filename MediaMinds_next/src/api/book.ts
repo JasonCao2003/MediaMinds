@@ -389,6 +389,44 @@ export const getGoogleBookDetailService = (id: string) => request.get(`/v1/book/
 export const importGoogleBookService = (id: string) =>
   request.post('/v1/book/google/import', null, { params: { id } });
 
+// ================== 书单 ==================
+
+export interface BookList {
+  id?: number;
+  name: string;
+  description?: string;
+  bookCount?: number;
+  createTime?: string;
+  updateTime?: string;
+}
+
+/** 用户书单列表（含每单图书数） */
+export const getBookListsService = () =>
+  request.get<ApiResult<BookList[]>>('/v1/book/list');
+
+export const createBookListService = (data: Partial<BookList>) =>
+  request.post<ApiResult<BookList>>('/v1/book/list', data);
+
+export const updateBookListService = (id: number | string, data: Partial<BookList>) =>
+  request.put<ApiResult<BookList>>(`/v1/book/list/${id}`, data);
+
+export const deleteBookListService = (id: number | string) =>
+  request.delete<ApiResult<void>>(`/v1/book/list/${id}`);
+
+/** 书单内的图书（后端按加入时间倒序返回） */
+export const getBookListItemsService = (id: number | string) =>
+  request.get<ApiResult<Book[]>>(`/v1/book/list/${id}/books`);
+
+export const addBookToListService = (listId: number | string, bookId: number | string) =>
+  request.post<ApiResult<void>>(`/v1/book/list/${listId}/books/${bookId}`);
+
+export const removeBookFromListService = (listId: number | string, bookId: number | string) =>
+  request.delete<ApiResult<void>>(`/v1/book/list/${listId}/books/${bookId}`);
+
+/** bookId → 包含它的书单 ID 数组 */
+export const getBookListMembershipService = () =>
+  request.get<ApiResult<Record<string, number[]>>>('/v1/book/list/membership');
+
 // ================== 统一书源（阶段 3） ==================
 
 /** 统一书源 id：Google Books / 豆瓣 / Gutenberg / OpenLibrary */
